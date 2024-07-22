@@ -1,0 +1,135 @@
+/* assets/styles.css */
+.custom-layout {
+  width: 100%;  /* Garantindo que o layout ocupe 100% da largura disponível */
+}
+
+body::-webkit-scrollbar {
+  width: 12px;  /* largura da barra de rolagem */
+}
+
+body::-webkit-scrollbar-track {
+  background: #f5f5f5;  /* cor da área de rastreamento */
+}
+
+body::-webkit-scrollbar-thumb {
+  background-color:#9b559c;  /* cor do polegar de rolagem */
+  border-radius: 20px;  /* arredondamento do polegar de rolagem */
+  border: 3px solid#9b559c;  /* cria padding em torno do polegar de rolagem */
+}
+
+.kanban-board {
+  display: flex;
+  justify-content: space-between;
+}
+
+.kanban-column {
+  border: 1px solid white;
+  border-radius: 5px;
+}
+
+.kanban-column-body {
+  min-height: 300px;
+  background-color: #ffffff00;
+  padding: 10px;
+  border-top: 1px solid white;
+}
+
+.kanban-item {
+  background-color: white;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px solid white;
+  border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.rounded-card {
+  border-radius: 15px;  
+}
+
+.no-link-button {
+  color: inherit;  /* Herda a cor do elemento pai */
+  text-decoration: none;  /* Remove o sublinhado */
+  background: none;  /* Remove o fundo do botão */
+  border: none;  /* Remove a borda do botão */
+  padding: 0;  /* Remove o preenchimento do botão */
+  cursor: pointer;  /* Mantém o cursor pointer */
+  outline: none;  /* Remove a borda de foco */
+  box-shadow: none;  /* Remove qualquer sombra */
+}
+
+/* Estilos para o modal */
+.custom-modal .modal-dialog {
+  max-width: 800px;
+  max-width: 300px;  /* Limita a largura do modal */
+  margin: auto;  /* Centraliza o modal horizontalmente */
+  display: flex;
+  align-items: center;  /* Centraliza verticalmente */
+  justify-content: center;  /* Centraliza horizontalmente */
+  min-height: calc(100% - 1rem);  /* Ajusta a altura mínima do modal */
+}
+
+.custom-modal .modal-content {
+  border-radius: 15px !important;
+  max-height: 80vh;  /* Limita a altura do modal */
+  overflow-y: auto;  /* Ativa o scroll vertical */
+}
+
+.custom-modal .modal-body {
+  overflow-y: auto;  /* Garante que o modal tenha barra de rolagem */
+}
+
+/* Estilos para a barra de rolagem no modal */
+.custom-modal .modal-body::-webkit-scrollbar {
+  width: 12px;  /* largura da barra de rolagem */
+}
+
+.custom-modal .modal-body::-webkit-scrollbar-track {
+  background: #f5f5f5;  /* cor da área de rastreamento */
+}
+
+.custom-modal .modal-body::-webkit-scrollbar-thumb {
+  background-color:#9b559c;  /* cor do polegar de rolagem */
+  border-radius: 20px;  /* arredondamento do polegar de rolagem */
+  border: 3px solid#9b559c;  /* cria padding em torno do polegar de rolagem */
+}
+
+.custom-backdrop .modal-backdrop {
+  background-color: rgba(0, 0, 0, 0.5) !important;  /* Fundo escuro */
+}
+
+.table-card {
+  margin-top: 15px;
+}
+
+.card-header-table {
+  background-color: #f8f9fa;
+  font-weight: bold;
+  border: 1px solid #dee2e6;
+  border-radius: 2px;
+  margin-bottom: 1rem;
+}
+
+.card-body-table {
+  border: 1px solid #dee2e6;
+  border-radius: 10px;
+  background-color: white;
+
+}
+
+.card-row-table {
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.custom-header-text {
+  margin-top: 12px;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.first-column-margin {
+  margin-left: 35px;
+}
