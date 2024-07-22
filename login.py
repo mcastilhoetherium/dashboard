@@ -3,8 +3,6 @@ from dash import dcc, html, Input, Output, State
 import dash_bootstrap_components as dbc
 import requests
 import json
-from flask import Flask
-import requests
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.MATERIA])
 
@@ -57,7 +55,7 @@ offcanvas_verificacao = dbc.Offcanvas(
             className="mb-3",
         ),
         dbc.Button("Enviar", id="verify-button", color="primary"),
-        html.Div(id="verify-status", className="mt-3")
+        dbc.Spinner(html.Div(id="verify-status", className="mt-3"), color="primary")
     ],
     id="offcanvas-verificacao",
     title="Verificação de código",
@@ -77,47 +75,31 @@ app.layout = html.Div(
                     )
                 ),
             ],
-            style={"height": "100vh", "display": "flex", "align-items": "center", "justify-content": "center"},
+            style={
+                "height": "100vh", 
+                "display": "flex", 
+                "align-items": "center", 
+                "justify-content": "center",
+                "backgroundImage": 'url("/assets/background.png")',
+                "backgroundSize": "cover"
+            },
         ),
         offcanvas_verificacao
     ]
 )
 
 @app.callback(
-    Output("login-status", "children"),
     Output("offcanvas-verificacao", "is_open"),
+    Output("login-status", "children"),
     Input("login-button", "n_clicks"),
     State("example-email", "value"),
     State("example-password", "value"),
     prevent_initial_call=True
 )
-def login(n_clicks, email, password):
+def open_offcanvas(n_clicks, email, password):
     if n_clicks and email and password:
-        url = "https://gatewayqa.sigcorp.com.br/plataforma/auth/login"
-        payload = json.dumps({
-            "email": email,
-            "cpf": "09876574965",  # Este valor pode ser dinâmico se necessário
-            "password": password,
-            "keepAlive": True,
-            "verifyCode": ""
-        })
-        headers = {
-            'Content-Type': 'application/json'
-        }
-
-        try:
-            response = requests.post(url, headers=headers, data=payload, verify=False)
-            if response.status_code == 200:
-                response_data = response.json()
-                if response_data.get("message") == "Código de verificação enviado para o email!":
-                    return "Código de verificação enviado para o email!", True
-                else:
-                    return f"Falha no login: {response.text}", False
-            else:
-                return f"Falha no login: {response.text}", False
-        except requests.exceptions.RequestException as e:
-            return f"Erro na requisição: {e}", False
-    return "", False
+        return True, "Verificando..."
+    return False, ""
 
 @app.callback(
     Output("verify-status", "children"),

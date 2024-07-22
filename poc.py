@@ -1285,7 +1285,7 @@ def create_responsaveis_table():
 def create_new_cadastro_modal():
     modal = html.Div(
         [
-            dbc.Button("Novo Cadastro", id="open-modal", color="#9b559c", className="mt-3"),
+            dbc.Button("Novo Cadastro", id="open-modal", color="red", className="custom-button mt-3"),
             dbc.Modal(
                 [
                     dbc.ModalHeader(dbc.ModalTitle("Novo Cadastro")),
@@ -1605,7 +1605,7 @@ def create_dashboard_tab_content():
             dbc.Col(
                 dbc.CardBody([
                     dbc.Row([
-                        dbc.Col(create_card_with_button("Chamados Abertos", create_area_chart(), "Saiba Mais", "saiba-mais-button"), md=6),
+                        dbc.Col(create_card_with_button("Chamados Abertos", create_area_chart()), md=6),
                         dbc.Col(create_card("Tipo de Intercorrências", create_bar_chart(get_total_intercorrencias_por_tipo())), md=6),
                     ])
                 ])
@@ -1825,12 +1825,21 @@ if verificar_token():
             new_row = {"Nome": nome, "Departamento": departamento, "Contato": contato}
             rows.append(new_row)
         return rows
-    def fetch_data_from_endpoint():
+  
+    # Callback para fechar o modaldef fetch_data_from_endpoint():
+    def fetch_data_from_endpoint():    
         response = requests.get("http://127.0.0.1:5000/ocorrencia")
         if response.status_code == 200:
             data = response.json()
-            table_header = [html.Tr([html.Th("Placa"), html.Th("Coluna2"), html.Th("Imagem"), html.Th("Data"), html.Th("Visualização")])]
-            table_body = [
+            table_header = html.Thead(html.Tr([
+                html.Th("Placa", className="card-body-table first-column-margin"),
+                html.Th("Coluna2", className="card-body-table"),
+                html.Th("Imagem", className="card-body-table"),
+                html.Th("Data", className="card-body-table"),
+                html.Th("Visualização", className="card-body-table")
+            ]))
+            
+            table_body = html.Tbody([
                 html.Tr([
                     html.Td(row[1]),
                     html.Td(row[5]),
@@ -1839,15 +1848,18 @@ if verificar_token():
                     html.Td(
                         html.Img(
                             src=f"https://carros.meumunicipio.online/{row[3]}",
+                            className="custom-image",
                             style={"width": "100px", "height": "auto", "cursor": "pointer"},
                             id={"type": "image-click", "index": row[3]}
                         )
                     )
                 ]) for row in data
-            ]
-            table = dbc.Table(table_header + table_body, bordered=True, hover=True, striped=True, responsive=True)
+            ])
+            
+            table = dbc.Table([table_header, table_body], bordered=True, hover=True, striped=True, responsive=True)
             return table
         return html.P("Erro ao carregar dados do endpoint.")
+
 
     # Callback para abrir e fechar o modal
     @app.callback(
