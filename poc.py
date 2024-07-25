@@ -15,6 +15,7 @@ import base64
 import math
 import dash_table
 import webbrowser
+from dash import no_update
 
 def verificar_token():
     endpoint = "http://127.0.0.1:5000/validar_token"
@@ -655,8 +656,6 @@ sidebar_left = dbc.Col(
                 html.Img(src="/assets/logo.png", height="auto", style={'max-height': '100%', 'max-width': '100%', 'vertical-align': 'middle'})
             ]
         ),
-
-       
         html.Br(),
         html.Div([
             dbc.Label("Ocorrências:"),
@@ -767,13 +766,43 @@ sidebar_left = dbc.Col(
                 style={"width": "100%"}
             ),
             html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),
-            
         ]),
-        
     ]
 )
 
+app.layout = html.Div([
+    sidebar_left,
+    html.Div(id='results-div')  # Div to display the results
+])
 
+@app.callback(
+    Output('results-div', 'children'),
+    [Input('asfalto-checklist', 'value'),
+     Input('sinalizacao-checklist', 'value'),
+     Input('vias-publicas-checklist', 'value'),
+     Input('outros-checklist', 'value')]
+)
+def update_results(asfalto, sinalizacao, vias_publicas, outros):
+    # Make API call here
+    filters = {
+        'asfalto': asfalto,
+        'sinalizacao': sinalizacao,
+        'vias_publicas': vias_publicas,
+        'outros': outros
+    }
+    
+
+    print("Filters:", filters)
+    # Example API call
+    response = requests.post('http://127.0.0.1:5000/filtro', json=filters)
+    data = response.json()
+    
+    # Process the data and create the results to display
+    results = []
+    for item in data:
+        results.append(html.Div(f"{item['type']}: {item['description']}"))
+    
+    return results
 # Função para criar um card
 # Função para criar um card
 def create_card(title, *contents):
@@ -1285,7 +1314,7 @@ def create_responsaveis_table():
 def create_new_cadastro_modal():
     modal = html.Div(
         [
-            dbc.Button("Novo Cadastro", id="open-modal", color="red", className="custom-button mt-3"),
+            dbc.Button("Novo Cadastro", id="open-modal", color="#9b559c", className="ml-8"),
             dbc.Modal(
                 [
                     dbc.ModalHeader(dbc.ModalTitle("Novo Cadastro")),
@@ -1317,8 +1346,8 @@ def create_new_cadastro_modal():
                     ),
                     html.Br(),
                     dbc.ModalFooter([
-                        dbc.Button("Salvar", id="save-button", color="#9b559c"),
-                        dbc.Button("Fechar", id="close-modal", className="ms-auto")
+                        
+                        dbc.Button("Salvar", id="close-modal", className="ms-auto")
                     ]),
                 ],
                 id="modal",
@@ -1605,7 +1634,7 @@ def create_dashboard_tab_content():
             dbc.Col(
                 dbc.CardBody([
                     dbc.Row([
-                        dbc.Col(create_card_with_button("Chamados Abertos", create_area_chart()), md=6),
+                        dbc.Col(create_card_with_button("Chamados Abertos", create_area_chart(), "Saiba Mais", "saiba-mais-button"), md=6),
                         dbc.Col(create_card("Tipo de Intercorrências", create_bar_chart(get_total_intercorrencias_por_tipo())), md=6),
                     ])
                 ])
@@ -1656,7 +1685,7 @@ def create_dashboard_tab_content():
 layout = None
 
 def get_logged_in_user():
-    return "Nome do Usuário"
+    return "Prefeitura Hipotética"
 
 # URL da foto do usuário
 user_photo_url = "https://upload.wikimedia.org/wikipedia/commons/2/22/Bras%C3%A3o_Santana_de_Parna%C3%ADba.png"  # substitua pelo URL da foto do usuário
@@ -1684,8 +1713,69 @@ def render_tab_content(active_tab):
         layout = create_dashboard_tab_content()
         return layout
     
+    
+edit_profile_modal = dbc.Modal(
+    [
+        dbc.ModalBody(
+            [
+                dbc.Row(
+                    dbc.Col(
+                        html.Img(src=user_photo_url, className="img-fluid rounded-circle", style={"width": "300px", "height": "300px"}),
+                        width={"size": 4, "offset": 4}
+                    ),
+                    className="mb-3"
+                ),
+                dbc.Row(
+                    dbc.Col(
+                        [
+                            dbc.Label(get_logged_in_user()),
+                            html.Br(),
+                            dbc.Button("Mudar Senha", id="open-change-password-fade", color="primary"),
+                        ],
+                        width=12,
+                        style={"textAlign": "center"}
+                    )
+                ),
+                dbc.Fade(
+                    [
+                        dbc.Label("Nova Senha"),
+                        dbc.InputGroup(
+                            [
+                                dbc.Input(id="new-password-input", type="password"),
+                                dbc.InputGroupText(
+                                    dbc.Button("Mostrar", id="toggle-new-password-visibility", color="secondary", outline=True, size="sm"),
+                                ),
+                            ]
+                        ),
+                        dbc.Label("Confirmar Senha"),
+                        dbc.InputGroup(
+                            [
+                                dbc.Input(id="confirm-password-input", type="password"),
+                                dbc.InputGroupText(
+                                    dbc.Button("Mostrar", id="toggle-confirm-password-visibility", color="secondary", outline=True, size="sm"),
+                                ),
+                            ]
+                        ),
+                        html.Div(id="password-validation-message", style={"color": "red"}),
+                        dbc.Button("Fechar", id="close-change-password-fade", className="ml-auto")
+                    ],
+                    id="change-password-fade",
+                    is_in=False,
+                ),
+            ]
+        ),
+        dbc.ModalFooter(
+            dbc.Button("Fechar", id="close-edit-profile-modal", className="ml-auto")
+        ),
+    ],
+    id="edit-profile-modal",
+    size="lg",
+    className="custom-modal"
+)
+
 
 if verificar_token():
+    
     app.layout = html.Div(
         className="row col-12",
         children=[
@@ -1694,7 +1784,6 @@ if verificar_token():
                 className="col-2",  
                 children=[
                     sidebar_left, 
-                   # chat_layout,
                     dcc.Store(id='selected-coordinates-store')
                 ]
             ),
@@ -1703,61 +1792,36 @@ if verificar_token():
                 className="col-10",  
                 children=[
                     dbc.Row(
-                        [
-                            dbc.Col(
+                        [dbc.Col(
+                            dbc.Tabs(
                                 [
-                                    dbc.Tabs(
-                                        [
-                                            dbc.Tab(label="Dashboard", tab_id="dashboard",tab_style={"height": "100%", "font-size": "20px"}),
-                                            dbc.Tab(label="Relatórios", tab_id="totals",tab_style={"height": "100%", "font-size": "20px"}),
-                                            dbc.Tab(label="Processos", tab_id="protocols",tab_style={"height": "100%", "font-size": "20px"}),
-                                            # dbc.Tab(label="Rotas", tab_id="reporter"),
-                                            dbc.Tab(label="Configuração", tab_id="settings",tab_style={"height": "100%", "font-size": "20px"}),
-                                        ],
-                                        id="tabs"
-                                    ),
+                                    dbc.Tab(label="Dashboard", tab_id="dashboard", tab_style={"height": "100%", "font-size": "20px"}),
+                                    dbc.Tab(label="Relatórios", tab_id="totals", tab_style={"height": "100%", "font-size": "20px"}),
+                                    dbc.Tab(label="Processos", tab_id="protocols", tab_style={"height": "100%", "font-size": "20px"}),
+                                    dbc.Tab(label="Configuração", tab_id="settings", tab_style={"height": "100%", "font-size": "20px"}),
                                 ],
-                                width=11,
+                                id="tabs",
+                                active_tab="dashboard",  # Aba ativa padrão
                             ),
-                             dbc.Col(
+                            width="11"
+                        ),
+                        dbc.Col(
+                            dbc.Tabs(
                                 [
-                                    dbc.DropdownMenu(
-                                        label= html.Img(src=user_photo_url, className="img-fluid rounded-circle", style={"width": "55px", "height": "55px", "box-shadow": "0 4px 4px 0 #bfbfbf, 0 6px 10px 0 #bfbfbf"}),
-                                        children=[
-                                            html.Div(
-                                                style={"textAlign": "center", "padding": "10px"},
-                                                children=[
-                                                    html.Img(src=user_photo_url, className="img-fluid rounded-circle", style={"width": "60px", "height": "60px"}),
-                                                    html.Span(get_logged_in_user(), className="d-block", style={"fontWeight": "bold"}),
-                                                    html.Br(),
-                                                    dbc.DropdownMenuItem("Editar Perfil", href="#"),
-                                                    dbc.DropdownMenuItem(divider=True),
-                                                    dbc.DropdownMenuItem("Sair", href="#"),
-                                                ],
-                                            ),
-                                        ],       
-                                        nav=True,
-                                        in_navbar=True,
-                                        toggle_style={
-                                            "margin-top": "6px",
-                                            "margin-left":"60%",# Adicione a margem superior
-                                            "padding": "0",  # Remova o padding
-                                            "border": "none",  # Remova a borda
-                                            "background": "none",
-                                            "align":"right"}, # Remova o fundo
-                                    ),
+                                    dbc.Tab(label="Perfil", tab_id="open-edit-profile-modal", id='open-edit-profile-modal', tab_style={"height": "100%", "font-size": "20px", "margin-left": "46%"}),
                                 ],
-                                width=1,
+                                id="profile-tab",
+                                active_tab=None,  # Nenhuma aba ativa por padrão
                             ),
-                           
-                        ],
+                        )],
                         align="right",
                     ),
+                    dcc.Loading(id="loading", type="default", children=[html.Div(id="loading-output")]),
                     # Espaçamento entre o Row e as Tabs
                     html.Div(
                         id="tab-content",
                         children=[
-                            html.Div(className="col-10", children=create_totals_layout()),  # layout ocupando 100% da largura
+                            html.Div(className="col-10", children=layout),  # layout ocupando 100% da largura
                         ]
                     ),
                     dcc.Interval(
@@ -1767,51 +1831,109 @@ if verificar_token():
                     )
                 ]
             ),
-        
-          # Script JavaScript para capturar cliques nos botões
-        html.Script('''
-        document.addEventListener('DOMContentLoaded', function() {
-            function addClickEvent(buttonId) {
-                document.getElementById(buttonId).onclick = function() {
-                    var row = this.closest('tr');
-                    var data = {
-                        ocorrencia: row.cells[0].innerText,
-                        rua: row.cells[1].innerText,
-                        bairro: row.cells[2].innerText,
-                        data: row.cells[3].innerText
-                    };
-                    fetch('http://127.0.0.1:5000/endpoint', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(data)
-                    })
-                    .then(response => response.json())
-                    .then(result => console.log('Success:', result))
-                    .catch(error => console.error('Error:', error));
+            # Modals
+            edit_profile_modal,
+            # Script JavaScript para capturar cliques nos botões
+            html.Script('''
+            document.addEventListener('DOMContentLoaded', function() {
+                function addClickEvent(buttonId) {
+                    document.getElementById(buttonId).onclick = function() {
+                        var row = this.closest('tr');
+                        var data = {
+                            ocorrencia: row.cells[0].innerText,
+                            rua: row.cells[1].innerText,
+                            bairro: row.cells[2].innerText,
+                            data: row.cells[3].innerText
+                        };
+                        fetch('http://127.0.0.1:5000/endpoint', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(data)
+                        })
+                        .then(response => response.json())
+                        .then(result => console.log('Success:', result))
+                        .catch(error => console.error('Error:', error));
+                    }
                 }
-            }
-            
-            // Adiciona eventos de clique aos botões já presentes na página
-            document.querySelectorAll('[id^=btn-doc-]').forEach(function(button) {
-                addClickEvent(button.id);
+
+                document.querySelectorAll('[id^=btn-doc-]').forEach(function(button) {
+                    addClickEvent(button.id);
+                });
             });
-        });
-    ''')
-    ]
-)
+            ''')
+        ]
+    )
+
     @app.callback(
-    Output("modal", "is_open"),
-    [Input("open-modal", "n_clicks"), Input("close-modal", "n_clicks")],
-    [State("modal", "is_open")],
-)
+        Output("edit-profile-modal", "is_open"),
+        [Input("open-edit-profile-modal", "n_clicks"), Input("close-edit-profile-modal", "n_clicks")],
+        [State("edit-profile-modal", "is_open")],
+    )
+    def toggle_modal(open_click, close_click, is_open):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            return is_open
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        if button_id == "open-edit-profile-modal":
+            return True
+        elif button_id == "close-edit-profile-modal":
+            return False
+        return is_open
+
+    @app.callback(
+        Output("change-password-fade", "is_in"),
+        [Input("open-change-password-fade", "n_clicks"), Input("close-change-password-fade", "n_clicks")],
+        [State("change-password-fade", "is_in")],
+    )
+    def toggle_change_password_fade(n1, n2, is_in):
+        if n1 or n2:
+            return not is_in
+        return is_in
+
+    @app.callback(
+        Output("password-validation-message", "children"),
+        [Input("new-password-input", "value"), Input("confirm-password-input", "value")],
+    )
+    def validate_password(new_password, confirm_password):
+        if new_password and confirm_password:
+            if new_password != confirm_password:
+                return "As senhas não coincidem."
+            else:
+                return ""
+        return ""
+
+    @app.callback(
+        Output("new-password-input", "type"),
+        [Input("toggle-new-password-visibility", "n_clicks")],
+        [State("new-password-input", "type")],
+    )
+    def toggle_new_password_visibility(n, current_type):
+        if n:
+            return "text" if current_type == "password" else "password"
+        return dash.no_update
+
+    @app.callback(
+        Output("confirm-password-input", "type"),
+        [Input("toggle-confirm-password-visibility", "n_clicks")],
+        [State("confirm-password-input", "type")],
+    )
+    def toggle_confirm_password_visibility(n, current_type):
+        if n:
+            return "text" if current_type == "password" else "password"
+        return dash.no_update
+
+    @app.callback(
+        Output("modal", "is_open"),
+        [Input("open-modal", "n_clicks"), Input("close-modal", "n_clicks")],
+        [State("modal", "is_open")],
+    )
     def toggle_modal(n1, n2, is_open):
         if n1 or n2:
             return not is_open
         return is_open
 
-    # Callback para salvar os dados do formulário
     @app.callback(
         Output("table", "data"),
         [Input("save-button", "n_clicks")],
@@ -1825,43 +1947,7 @@ if verificar_token():
             new_row = {"Nome": nome, "Departamento": departamento, "Contato": contato}
             rows.append(new_row)
         return rows
-  
-    # Callback para fechar o modaldef fetch_data_from_endpoint():
-    def fetch_data_from_endpoint():    
-        response = requests.get("http://127.0.0.1:5000/ocorrencia")
-        if response.status_code == 200:
-            data = response.json()
-            table_header = html.Thead(html.Tr([
-                html.Th("Placa", className="card-body-table first-column-margin"),
-                html.Th("Coluna2", className="card-body-table"),
-                html.Th("Imagem", className="card-body-table"),
-                html.Th("Data", className="card-body-table"),
-                html.Th("Visualização", className="card-body-table")
-            ]))
-            
-            table_body = html.Tbody([
-                html.Tr([
-                    html.Td(row[1]),
-                    html.Td(row[5]),
-                    html.Td(row[6]),
-                    html.Td(row[4]),
-                    html.Td(
-                        html.Img(
-                            src=f"https://carros.meumunicipio.online/{row[3]}",
-                            className="custom-image",
-                            style={"width": "100px", "height": "auto", "cursor": "pointer"},
-                            id={"type": "image-click", "index": row[3]}
-                        )
-                    )
-                ]) for row in data
-            ])
-            
-            table = dbc.Table([table_header, table_body], bordered=True, hover=True, striped=True, responsive=True)
-            return table
-        return html.P("Erro ao carregar dados do endpoint.")
 
-
-    # Callback para abrir e fechar o modal
     @app.callback(
         Output("modal-intercorrencias", "is_open"),
         [Input("link-intercorrencias", "n_clicks"), Input("close-modal-intercorrencias", "n_clicks")],
@@ -1872,7 +1958,6 @@ if verificar_token():
             return not is_open
         return is_open
 
-    # Callback para atualizar a tabela com dados do endpoint
     @app.callback(
         Output("table-container-intercorrencias", "children"),
         Input("modal-intercorrencias", "is_open")
@@ -1882,13 +1967,12 @@ if verificar_token():
             return fetch_data_from_endpoint()
         return html.P("Clique no link para ver os detalhes.")
 
-    # Callback para abrir o modal da imagem ao clicar
     @app.callback(
-    Output("modal-image-display", "is_open"),
-    Output("modal-image", "src"),
-    [Input({"type": "image-click", "index": dash.dependencies.ALL}, "n_clicks")],
-    [State("modal-image-display", "is_open")]
-)
+        Output("modal-image-display", "is_open"),
+        Output("modal-image", "src"),
+        [Input({"type": "image-click", "index": dash.dependencies.ALL}, "n_clicks")],
+        [State("modal-image-display", "is_open")]
+    )
     def display_image_modal(n_clicks, is_open):
         ctx = dash.callback_context
         if not ctx.triggered:
@@ -1896,9 +1980,9 @@ if verificar_token():
         
         triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
         triggered_index = triggered_id.split(":")[1].strip('}"')
-        print(triggered_index)
         image_src = f"https://carros.meumunicipio.online/{triggered_index}.png"
         return not is_open, image_src
+
     @app.callback(
         Output("modal-ruas", "is_open"),
         [Input("link-ruas", "n_clicks"), Input("close-modal-ruas", "n_clicks")],
@@ -1949,111 +2033,149 @@ if verificar_token():
             return not is_open
         return is_open
 
-
     @app.callback(
-            Output('output-div', 'children'),
-            [
-                Input('asfalto-checklist', 'value'),
-                Input('sinalizacao-checklist', 'value'),
-                Input('vias-publicas-checklist', 'value'),
-                Input('outros-checklist', 'value'),
-            ]
-        )
+        Output('output-div', 'children'),
+        [
+            Input('asfalto-checklist', 'value'),
+            Input('sinalizacao-checklist', 'value'),
+            Input('vias-publicas-checklist', 'value'),
+            Input('outros-checklist', 'value'),
+        ]
+    )
     def update_output(asfalto_values, sinalizacao_values, vias_publicas_values, outros_values):
         selected_values = []
-        print("caiu nessa funcao")
         if asfalto_values:
             selected_values.extend(asfalto_values)
         if sinalizacao_values:
             selected_values.extend(sinalizacao_values)
-            if vias_publicas_values:
-                selected_values.extend(vias_publicas_values)
-            if outros_values:
-                selected_values.extend(outros_values)
+        if vias_publicas_values:
+            selected_values.extend(vias_publicas_values)
+        if outros_values:
+            selected_values.extend(outros_values)
 
-            return html.Div([
-                html.H4("Selected Values:"),
-                html.Pre(str(selected_values))
+        return html.Div([
+            html.H4("Selected Values:"),
+            html.Pre(str(selected_values))
+        ])
+
+    @app.callback(
+        Output('selected-data', 'children'),
+        Input('generic-map', 'selectedData')
+    )
+    def display_selected_data(selectedData):
+        if selectedData is None:
+            return "No data selected"
+        return json.dumps(selectedData, indent=2)
+
+    @app.callback(
+        Output('interval-component', 'disabled'),
+        Input('selected-coordinates-store', 'data'),
+        State('selected-coordinates-store', 'data')
+    )
+    def trigger_alert(new_data, old_data):
+        if new_data and new_data != old_data:
+            coordinates_str = ', '.join([f"Lat: {lat}, Lon: {lon}" for lat, lon in new_data])
+            alert_script = f'alert("Selected Coordinates: {coordinates_str}");'
+            return False, dash.no_update, alert_script
+        return True, dash.no_update, dash.no_update
+
+    @app.callback(
+        Output("loading-output", "children"),
+        Input("tabs", "active_tab")
+    )
+    def display_loading(active_tab):
+        if active_tab == "dashboard":
+            return html.Div(
+                [
+                    dcc.Interval(id="progress-interval", n_intervals=0, interval=40),  # Update every 40ms
+                    dbc.Progress(id="progress"),
+                ]
+            )
+        return html.Div()
+
+    # Callback to update the progress bar
+    @app.callback(
+        [Output("progress", "value"), Output("progress", "label"), Output("progress-container", "style")],
+        [Input("progress-interval", "n_intervals")],
+    )
+    def update_progress(n):
+        # Calculate progress
+        progress = min(n * 2.5, 100)  # (4 seconds / 0.04 seconds per interval) = 100 updates
+        # Hide the element after 4 seconds
+        display_style = {"display": "none"} if n * 0.04 >= 4 else {}
+        return progress, f"{int(progress)}%", display_style
+
+    def fetch_data_from_endpoint():    
+        response = requests.get("http://127.0.0.1:5000/ocorrencia")
+        if response.status_code == 200:
+            data = response.json()
+            table_header = html.Thead(html.Tr([
+                html.Th("Placa", className="card-body-table first-column-margin"),
+                html.Th("Coluna2", className="card-body-table"),
+                html.Th("Imagem", className="card-body-table"),
+                html.Th("Data", className="card-body-table"),
+                html.Th("Visualização", className="card-body-table")
+            ]))
+            
+            table_body = html.Tbody([
+                html.Tr([
+                    html.Td(row[1]),
+                    html.Td(row[5]),
+                    html.Td(row[6]),
+                    html.Td(row[4]),
+                    html.Td(
+                        html.Img(
+                            src=f"https://carros.meumunicipio.online/{row[3]}",
+                            className="custom-image",
+                            style={"width": "100px", "height": "auto", "cursor": "pointer"},
+                            id={"type": "image-click", "index": row[3]}
+                        )
+                    )
+                ]) for row in data
             ])
-        @app.callback(
-            Output('selected-data', 'children'),
-            Input('generic-map', 'selectedData')
-        )
-        def display_selected_data(selectedData):
-            if selectedData is None:
-                return "No data selected"
-            return json.dumps(selectedData, indent=2)
+            
+            table = dbc.Table([table_header, table_body], bordered=True, hover=True, striped=True, responsive=True)
+            return table
+        return html.P("Erro ao carregar dados do endpoint.")
 
-        def update_chat(message):
-            if message:
-                return [html.P(message)]  # Adicione a mensagem ao feed de chat
-            else:
-                return []  # Se não houver mensagem, retorna uma lista vazia
+    app.clientside_callback(
+        """
+        function(n_clicks, data) {
+            if(n_clicks) {
+                document.querySelectorAll("[id^='btn-doc']").forEach(button => {
+                    button.onclick = function() {
+                        var row = button.closest('tr');
+                        var imageLink = row.querySelector('a').href;  // Captura o link da imagem
+                        var data = {
+                            ocorrencia: row.cells[0].innerText,
+                            rua: row.cells[1].innerText,
+                            bairro: row.cells[2].innerText,
+                            data: row.cells[3].innerText,
+                            imagem: imageLink  // Inclui o link da imagem no objeto data
+                        };
 
-        def toggle_offcanvas_scrollable(n1, is_open):
-            if n1:
-                return not is_open
-            return is_open
+                        console.log('data:', data);  // Imprime o data no console
 
-
-        def store_selected_data(selectedData):
-            if selectedData:
-                coordinates = selectedData['points']
-                coords_list = [(point['lat'], point['lon']) for point in coordinates]
-                return coords_list
-            return []
-
-        @app.callback(
-            Output('interval-component', 'disabled'),
-            Input('selected-coordinates-store', 'data'),
-            State('selected-coordinates-store', 'data')
-        )
-        def trigger_alert(new_data, old_data):
-            if new_data and new_data != old_data:
-                coordinates_str = ', '.join([f"Lat: {lat}, Lon: {lon}" for lat, lon in new_data])
-                alert_script = f'alert("Selected Coordinates: {coordinates_str}");'
-                return False, dash.no_update, alert_script
-            return True, dash.no_update, dash.no_update
-
-    
-        app.clientside_callback(
-            """
-            function(n_clicks, data) {
-                if(n_clicks) {
-                    document.querySelectorAll("[id^='btn-doc']").forEach(button => {
-                        button.onclick = function() {
-                            var row = button.closest('tr');
-                            var imageLink = row.querySelector('a').href;  // Captura o link da imagem
-                            var data = {
-                                ocorrencia: row.cells[0].innerText,
-                                rua: row.cells[1].innerText,
-                                bairro: row.cells[2].innerText,
-                                data: row.cells[3].innerText,
-                                imagem: imageLink  // Inclui o link da imagem no objeto data
-                            };
-                            
-                            console.log('data:', data);  // Imprime o data no console
-
-                            fetch('http://127.0.0.1:5000/action', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify(data)
-                            })
-                            .then(response => response.json())
-                            .then(result => console.log('Success:', result))
-                            .catch(error => console.error('Error:', error));
-                        }
-                    });
-                }
-                return window.dash_clientside.no_update;
+                        fetch('http://127.0.0.1:5000/action', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(data)
+                        })
+                        .then(response => response.json())
+                        .then(result => console.log('Success:', result))
+                        .catch(error => console.error('Error:', error));
+                    }
+                });
             }
-            """,
-            Output('store', 'data'),
-            Input('table-body', 'children'),
-            State('store', 'data')
-        )
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output('store', 'data'),
+        Input('table-body', 'children'),
+        State('store', 'data')
+    )
 
 else:
     print("Token inválido. Redirecionando para a página de login...")

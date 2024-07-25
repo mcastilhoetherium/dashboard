@@ -38,16 +38,16 @@ def total_requerimentos():
 
         response = requests.get(url, headers=headers, data=payload, verify=False)
         
-        print("Response status code:", response.status_code)  # Print status code for debugging
+        
         
         response.raise_for_status()  # Raises an exception for 4xx, 5xx HTTP responses
         
-        print("Response text:", response.text)  # Print response text for debugging
+       
         
         # Try to parse the response JSON
         data = response.json()
         
-        print("Parsed JSON data:", data)  # Print parsed JSON data for debugging
+       
         
         # Return the total number of results
         return jsonify({'total_requerimentos': len(data)})
@@ -297,7 +297,7 @@ def priorizacao():
     cursor.execute(insert_query, (ocorrencia1, ocorrencia2, ocorrencia3))
     db_connection.commit()
 
-    print(ocorrencia1, ocorrencia2, ocorrencia3)
+
     # Retornar uma resposta JSON
     return jsonify({'ocorrencia1': ocorrencia1, 'ocorrencia2': ocorrencia2, 'ocorrencia3': ocorrencia3})
 
@@ -306,7 +306,7 @@ def autenticacao():
     global token
     token = request.json.get('token')  # Assumindo que o token será enviado como JSON {'token': 'token_aqui'}
     if token:
-        print(f'Token recebido: {token}')
+        
         return redirect('http://127.0.0.1:8050/')
     else:
         return 'Token não encontrado na requisição', 400
@@ -324,7 +324,7 @@ def visualizar_token():
 @app.route('/validar_token', methods=['GET'])
 def validar_token():
     global token_info
-    print('oi')
+    
     url = "https://gatewayqa.sigcorp.com.br/plataforma/auth/get-user"
     
 
@@ -336,10 +336,10 @@ def validar_token():
     try:
         response = requests.get(url, headers=headers,verify=False)
         if response.status_code == 200:
-            print('caiu aqui')
+            
             return jsonify({'status': 'sim'})
         else:
-            print( 'nao caiu aqui')
+            
             return jsonify({'status': 'não'})
     except Exception as e:
         return jsonify({'status': 'não', 'error': str(e)}), 500
@@ -356,7 +356,7 @@ def action():
 
     # Restante do código para o endpoint POST
     data = request.get_json()
-    print (data)
+   
     
     ocorrencia = data.get('ocorrencia')
     rua = data.get('rua')
@@ -381,7 +381,7 @@ def action():
             f.write(response.content)
 
         # Processar a imagem (exemplo: imprimir o conteúdo)
-        print(f'Imagem processada: {caminho_salvar}')
+        
         
 
         # Apagar a imagem após o processamento
@@ -446,7 +446,7 @@ def action():
 '''def action():
     data = request.get_json()
 
-    print(data)
+   
 
 
 
@@ -522,7 +522,7 @@ def filtro():
 
     # Extraindo valores do JSON corretamente
     date = data.get('date')
-    print(date)
+
     bairro = data.get('bairro')
     rua = data.get('rua')
     page = data.get('page', 1)
@@ -550,7 +550,7 @@ def filtro():
         query_count += " AND bairroIntercorrencia = %s"
         params.append(bairro)
 
-    print (query_count)
+  
 
     # Executando a consulta de contagem
     cursor.execute(query_count, tuple(params))

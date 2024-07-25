@@ -1,7 +1,7 @@
 .btn-primary {
-  --bs-btn-color: #fff;
-  --bs-btn-bg: #9b559c;
-  --bs-btn-border-color: #9b559c;
+  --bs-btn-color: #ffffff;
+  --bs-btn-bg:  #8d008fa6;
+  --bs-btn-border-color:  #8d008fa6;
   --bs-btn-hover-color: #fff;
   --bs-btn-hover-bg: #1c80cf;
   --bs-btn-hover-border-color: #1a78c2;
@@ -16,16 +16,16 @@
 }
 
 .form-check-input:checked {
-  background-color: #9b559c;
-  border-color: #9b559c;
+  background-color:  #8d008fa6;
+  border-color:  #8d008fa6;
 }
 
 .form-switch .form-check-input:checked::before {
   left: calc(100% - .8em);
-  background-color: #9b559c;
+  background-color:  #8d008fa6;
 }
 .form-switch .form-check-input:checked {
-  background-color: #9b559c6e;
+  background-color:  #8d008fa6;
 }
 
 .page-link {
@@ -33,7 +33,7 @@
   display: block;
   padding: var(--bs-pagination-padding-y) var(--bs-pagination-padding-x);
   font-size: var(--bs-pagination-font-size);
-  color:#9b559c;
+  color: #00000085;
   text-decoration: none;
   background-color: var(--bs-pagination-bg);
   border: var(--bs-pagination-border-width) solid var(--bs-pagination-border-color);
@@ -54,9 +54,9 @@ body::-webkit-scrollbar-track {
 }
 
 body::-webkit-scrollbar-thumb {
-  background-color:#9b559c;  /* cor do polegar de rolagem */
+  background-color: #8d008fa6;  /* cor do polegar de rolagem */
   border-radius: 20px;  /* arredondamento do polegar de rolagem */
-  border: 3px solid#9b559c;  /* cria padding em torno do polegar de rolagem */
+  border: 3px solid #8d008fa6;  /* cria padding em torno do polegar de rolagem */
 }
 
 .kanban-board {
@@ -131,9 +131,9 @@ body::-webkit-scrollbar-thumb {
 }
 
 .custom-modal .modal-body::-webkit-scrollbar-thumb {
-  background-color:#9b559c;  /* cor do polegar de rolagem */
+  background-color: #8d008fa6;  /* cor do polegar de rolagem */
   border-radius: 20px;  /* arredondamento do polegar de rolagem */
-  border: 3px solid#9b559c;  /* cria padding em torno do polegar de rolagem */
+  border: 3px solid #8d008fa6;  /* cria padding em torno do polegar de rolagem */
 }
 
 .custom-backdrop .modal-backdrop {
@@ -177,8 +177,8 @@ body::-webkit-scrollbar-thumb {
 }
 
 .custom-button {
-  background-color: #9b559c;
-  border-color: #9b559c;
+  background-color:  #8d008fa6;
+  border-color:  #8d008fa6;
   color: white; /* Para garantir que o texto seja legível sobre a cor de fundo */
 }
 
@@ -188,7 +188,7 @@ body::-webkit-scrollbar-thumb {
 }
 
 .nav-tabs .nav-link.active, .nav-tabs .nav-link.active:focus {
-  color: #9b559c;
+  color:  #8d008fa6;
   border: none;
-  box-shadow: inset 0 -2px 0 #9b559c;
+  box-shadow: inset 0 -2px 0  #8d008fa6;
 }
