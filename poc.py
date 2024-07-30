@@ -17,6 +17,10 @@ import dash_table
 import webbrowser
 from dash import no_update
 
+
+
+flag = 0 
+
 def verificar_token():
     endpoint = "http://127.0.0.1:5000/validar_token"
     try:
@@ -1684,6 +1688,78 @@ def create_dashboard_tab_content():
 
 layout = None
 
+def display_loading(active_tab):
+    if active_tab == "dashboard":
+        return html.Div(
+            [
+                dcc.Interval(id="progress-interval", n_intervals=0, interval=40),  # Atualiza a cada 40ms
+                html.Div(
+                    [
+                        dbc.Progress(id="progress"),
+                    ],
+                    id="progress-container",
+                    style={
+                        "position": "fixed",
+                        "top": "50%",
+                        "left": "50%",
+                        "transform": "translate(-50%, -50%)",
+                        "zIndex": "1000",
+                        "background": "rgba(255, 255, 255, 0.8)",
+                        "padding": "20px",
+                        "borderRadius": "10px",
+                    },
+                ),
+                html.Div(
+                    style={
+                        "position": "fixed",
+                        "top": "0",
+                        "left": "0",
+                        "width": "100%",
+                        "height": "100%",
+                        "backgroundColor": "rgba(0, 0, 0, 0.5)",
+                        "zIndex": "999",
+                    },
+                    id="background-overlay"
+                ),
+            ]
+        )
+    return html.Div()
+
+# Callback para atualizar a barra de progresso
+@app.callback(
+    [
+        Output("progress", "value"), 
+        Output("progress", "label"), 
+        Output("progress-container", "style"), 
+        Output("background-overlay", "style")
+    ],
+    [Input("progress-interval", "n_intervals")]
+)
+def update_progress(n):
+    # Calcula o progresso
+    progress = min(n * 2, 100)  # (4 segundos / 0.04 segundos por intervalo) = 100 atualizações
+    # Oculta os elementos após 4 segundos
+    display_style = {"display": "none"} if n * 0.04 >= 4 else {
+        "position": "fixed",
+        "top": "50%",
+        "left": "50%",
+        "transform": "translate(-50%, -50%)",
+        "zIndex": "1000",
+        "background": "rgba(255, 255, 255, 0.8)",
+        "padding": "20px",
+        "borderRadius": "10px",
+    }
+    background_style = {"display": "none"} if n * 0.04 >= 4 else {
+        "position": "fixed",
+        "top": "0",
+        "left": "0",
+        "width": "100%",
+        "height": "100%",
+        "backgroundColor": "rgba(0, 0, 0, 0.5)",
+        "zIndex": "999",
+    }
+    return progress, f"{int(progress)}%", display_style, background_style
+
 def get_logged_in_user():
     return "Prefeitura Hipotética"
 
@@ -1711,7 +1787,12 @@ def render_tab_content(active_tab):
         return layout
     else:
         layout = create_dashboard_tab_content()
+        
+        flag = 1
         return layout
+    
+if flag == 1:
+    display_loading("dashboard")
     
     
 edit_profile_modal = dbc.Modal(
@@ -1823,7 +1904,7 @@ if verificar_token():
                         children=[
                             html.Div(className="col-10", children=layout),  # layout ocupando 100% da largura
                         ]
-                    ),
+                    ),display_loading("dashboard"),
                     dcc.Interval(
                         id='interval-component',
                         interval=5*1000,  
@@ -2079,32 +2160,8 @@ if verificar_token():
             return False, dash.no_update, alert_script
         return True, dash.no_update, dash.no_update
 
-    @app.callback(
-        Output("loading-output", "children"),
-        Input("tabs", "active_tab")
-    )
-    def display_loading(active_tab):
-        if active_tab == "dashboard":
-            return html.Div(
-                [
-                    dcc.Interval(id="progress-interval", n_intervals=0, interval=40),  # Update every 40ms
-                    dbc.Progress(id="progress"),
-                ]
-            )
-        return html.Div()
-
-    # Callback to update the progress bar
-    @app.callback(
-        [Output("progress", "value"), Output("progress", "label"), Output("progress-container", "style")],
-        [Input("progress-interval", "n_intervals")],
-    )
-    def update_progress(n):
-        # Calculate progress
-        progress = min(n * 2.5, 100)  # (4 seconds / 0.04 seconds per interval) = 100 updates
-        # Hide the element after 4 seconds
-        display_style = {"display": "none"} if n * 0.04 >= 4 else {}
-        return progress, f"{int(progress)}%", display_style
-
+    
+    
     def fetch_data_from_endpoint():    
         response = requests.get("http://127.0.0.1:5000/ocorrencia")
         if response.status_code == 200:
