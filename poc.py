@@ -13,13 +13,43 @@ import logging
 from io import BytesIO 
 import base64
 import math
-import dash_table
+from dash import dash_table
 import webbrowser
 from dash import no_update
+import plotly.express as px
+from flask import Flask, render_template,request, jsonify, redirect, url_for
 
 
 
+server = Flask(__name__)
 flag = 0 
+
+
+def create_tabs(access_type):
+    print (access_type)
+    tabs = []
+    # Aba Dashboard (visível para todos)
+    tabs.append(dbc.Tab(label="Dashboard", tab_id="dashboard", tab_style={"height": "100%", "font-size": "20px"}))
+    tabs.append(dbc.Tab(label="Mapa", tab_id="maps", tab_style={"height": "100%", "font-size": "20px"}))
+
+    # Aba Relatórios (visível para 'full', 'adm', e 'relatorio')
+    if access_type in ['full', 'adm', 'relatorio']:
+        tabs.append(dbc.Tab( label="Relatório",tab_id="totals", tab_style={"height": "100%", "font-size": "20px"}))
+
+    # Aba Processos (visível para todos)
+    tabs.append(dbc.Tab(label="Processos", tab_id="protocols", tab_style={"height": "100%", "font-size": "20px"}))
+
+    # Aba Configuração (visível para 'full' e 'adm')
+    if access_type in ['full', 'adm']:
+        tabs.append(dbc.Tab(label="Configuração", tab_id="settings", tab_style={"height": "100%", "font-size": "20px"}))
+
+    # Aba Parâmetros (visível apenas para 'full')
+    if access_type == 'full':
+        tabs.append(dbc.Tab(label="Parâmetros", tab_id="parametros", tab_style={"height": "100%", "font-size": "20px"}))
+
+    return tabs
+
+
 
 def verificar_token():
     endpoint = "http://127.0.0.1:5000/validar_token"
@@ -42,7 +72,7 @@ def verificar_token():
     except ValueError as e:
         logging.error(f"Erro ao decodificar JSON: {e}")
         return False    
-app = dash.Dash(__name__, external_stylesheets=[
+app = dash.Dash(__name__, server=server, url_base_pathname='/dashboard/',external_stylesheets=[
         dbc.themes.MATERIA, "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css",
     "https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.5.0/font/bootstrap-icons.min.css"], suppress_callback_exceptions=True) # Claro
 
@@ -89,7 +119,32 @@ def create_offcanvas_content(call_type):
         ]),
         className="mt-3",
     )
+def get_data_from_api():
+    url = 'http://127.0.0.1:5000/ocorrencia_priorizada'
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        # Converter a lista de listas para a lista de dicionários
+        formatted_data = [{'label': item[0], 'value': item[0]} for item in data]
+        return formatted_data
+    else:
+        return []
+    
+    
 
+
+def get_ocorrencias():
+    url = "http://127.0.0.1:5000/ocorrencias"  # Substitua pela URL da sua API
+    response = requests.get(url)
+    
+    if response.status_code == 200:
+        ocorrencia = response.json()  # Assumindo que o retorno é um JSON com a lista de ocorrências
+        options = [{"label": occ["nome"], "value": occ["id"]} for occ in ocorrencia]
+        return options
+    else:
+        return []
+    
+    
 def get_coordenadas():
     endpoint = "http://127.0.0.1:5000/coordenadas"
     response = requests.get(endpoint)
@@ -106,58 +161,6 @@ def get_car_location_data():
         return response.json()
     else:
         return []
-
-def create_map(data):
-    markers = []
-    for item in data:
-        tipo = item[0]
-        coordenadas = eval(item[1])
-        imagem = item[2]
-
-        markers.append(
-            dict(
-                lat=coordenadas[0],
-                lon=coordenadas[1],
-                hoverinfo="text",
-                hovertext=f"Tipo: {tipo}<br><img src='{imagem}' width='100px'>"
-            )
-        )
-
-    map_card = dbc.Card(
-        dbc.CardBody([
-            html.H4("Mapa de Intercorrências", className="card-title"),
-            dcc.Graph(
-                id="mapa",
-                figure={
-                    "data": [{
-                        "type": "scattermapbox",
-                        "lat": [marker['lat'] for marker in markers],
-                        "lon": [marker['lon'] for marker in markers],
-                        "mode": "markers",
-                        "marker": {
-                            "size": 20,
-                            "opacity": 0.7,
-                        },
-                        "hoverinfo": "text",
-                        "hovertext": [marker['hovertext'] for marker in markers]
-                    }],
-                    "layout": {
-                        "mapbox": {
-                            "style": "carto-positron",
-                            "zoom": 10,
-                            "center": {"lat": -23.5505, "lon": -46.6333}  # Coordenadas de São Paulo
-                        },
-                        "margin": {"l": 0, "r": 0, "t": 0, "b": 0},
-                        "height": 335
-                    }
-                }
-            )
-        ]),
-        className="mt-3",
-        style={'marginTop': '0'}
-    )
-
-    return map_card
 
 def create_generic_map():
     # Definindo o layout do mapa
@@ -286,14 +289,15 @@ def create_map(data):
                 lat=coordenadas[0],
                 lon=coordenadas[1],
                 hoverinfo="text",
-                hovertext=f"Tipo: {tipo}<br><img src='{imagem}' width='100px'>"
+                hovertext=f"Tipo: {tipo}",
+                imagem=f"https://urbanai.meumunicipio.online/{imagem}"  # Inclui a URL da imagem nos dados do marcador
             )
         )
 
-    # Cria o layout do mapa dentro de um card
     map_card = dbc.Card(
         dbc.CardBody([
             html.H4("Mapa de Intercorrências", className="card-title"),
+           
             dcc.Graph(
                 id="mapa",
                 figure={
@@ -305,18 +309,20 @@ def create_map(data):
                         "marker": {
                             "size": 10,
                             "opacity": 0.7,
+                            "color": [marker.get('color', '#9a559c') for marker in markers],  
                         },
                         "hoverinfo": "text",
-                        "hovertext": [marker['hovertext'] for marker in markers]
+                        "hovertext": [marker['hovertext'] for marker in markers],
+                        "customdata": [marker['imagem'] for marker in markers],  # Passa a URL da imagem para customdata
                     }],
                     "layout": {
                         "mapbox": {
                             "style": "open-street-map",
-                            "zoom": 15,
-                            "center": {"lat": -23.48474866666667, "lon": -46.86931466666667}  # Coordenadas de São Paulo
+                            "zoom": 16,
+                            "center": {"lat": -23.48474866666667, "lon": -46.86931466666667}
                         },
                         "margin": {"l": 0, "r": 0, "t": 0, "b": 0},
-                        "height": 335
+                        "height": 970
                     }
                 }
             )
@@ -326,6 +332,7 @@ def create_map(data):
     )
 
     return map_card
+    
 def get_car_location_data():
     endpoint = "http://127.0.0.1:5000/dados_localizacao_carro"
     response = requests.get(endpoint)
@@ -392,7 +399,7 @@ def create_car_location_map(data):
 def get_images():
     endpoint = "http://127.0.0.1:5000/imagens"
     response = requests.get(endpoint)
-    if response.status_code == 200:
+    if response.status_code == 200: 
         return response.json()
     else:
         return []
@@ -650,14 +657,14 @@ def create_top_bairros_intercorrencias_chart(data):
 
 
 
-sidebar_left = dbc.Col(
+'''sidebar_left = dbc.Col(
     style=sidebar_left_style,
     xs=12, sm=6, md=5, lg=4, xl=3,
     children=[
         html.Div(
             style={'display': 'flex', 'justify-content': 'center', 'align-items': 'center', 'height': '100%'},
             children=[
-                html.Img(src="/assets/logo.png", height="auto", style={'max-height': '100%', 'max-width': '100%', 'vertical-align': 'middle'})
+                html.Img(src="dashboard/assets/logo.png", height="auto", style={'max-height': '100%', 'max-width': '100%', 'vertical-align': 'middle'})
             ]
         ),
         html.Br(),
@@ -772,14 +779,27 @@ sidebar_left = dbc.Col(
             html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),html.Br(),
         ]),
     ]
+)'''
+
+
+sidebar_left = dbc.Col(
+    style=sidebar_left_style,
+    xs=12, sm=6, md=5, lg=4, xl=3,
+    children=[
+        html.Div(
+            style={'display': 'flex', 'justify-content': 'center', 'align-items': 'center', 'height': '100%'},
+            children=[
+                html.Img(src="dashboard/assets/logo.png", height="auto", style={'max-height': '100%', 'max-width': '100%', 'vertical-align': 'middle'})
+            ]
+        ),
+        html.Br(),
+        
+    ]
 )
 
-app.layout = html.Div([
-    sidebar_left,
-    html.Div(id='results-div')  # Div to display the results
-])
 
 @app.callback(
+    
     Output('results-div', 'children'),
     [Input('asfalto-checklist', 'value'),
      Input('sinalizacao-checklist', 'value'),
@@ -907,83 +927,121 @@ def create_speed_chart():
     fig.update_layout(height=335, width=230)  
     return dcc.Graph(figure=fig)
 
+mapa = go.Figure(go.Scattermapbox(
+    mode='markers',
+    marker=dict(size=10, color='blue'),
+    text=['']
+))
+
+mapa.update_layout(
+    mapbox_style="open-street-map",  # ou "carto-positron", "carto-darkmatter", etc.
+    showlegend=False,
+    autosize=True,
+    margin=dict(l=0, r=0, t=0, b=0)  # Ajustar margens conforme necessário
+)
+
+
 def create_totals_layout():
     return html.Div([
-        dbc.Card([
-            dbc.CardBody([
-                dbc.Row([
+        dbc.Row([
+            # Card de Relatório
+            dbc.Col(dbc.Card([
+                dbc.CardBody([
                     html.H4("Relatório", className="card-title"),
-                ]),
-                dbc.Row([
-                    dbc.Col(dbc.Input(id='input-date', placeholder="Data", type="date", style={'width': '100%'}), xs=12, md=3, className="mb-2"),
-                    dbc.Col(dbc.Input(id='input-rua', placeholder="Rua", type="text", style={'width': '100%'}), xs=12, md=3, className="mb-2"),
-                    dbc.Col(dbc.Input(id='input-bairro', placeholder="Bairro", type="text", style={'width': '100%'}), xs=12, md=3, className="mb-2"),
-                    dbc.Col(html.Div([
-                        dbc.Button(html.I(className="bi bi-search"), id='search-button', style={'margin-right': '2%'}, color='#9b559c', className="btn-icon"),
-                        dbc.Button(html.I(className="bi bi-file-earmark-pdf"), id='pdf-button', style={'margin-right': '2%'}, color='white', className="btn-icon"),
-                        dbc.Button(html.I(className="bi bi-file-earmark-excel"), color='white', className="btn-icon"),
-                    ]), xs=12, md=3, className="mb-2"),
-                ]),
-                dbc.Row([
-                    dbc.Col(
-                        dbc.Card(
-                            dbc.CardBody([
-                                html.H4("Histórico de Ocorrências", className="card-title"),
-                                dbc.Table([
-                                    html.Thead(html.Tr([
-                                        html.Th("Ocorrências"),
-                                        html.Th("Rua"),
-                                        html.Th("Bairro"),
-                                        html.Th("Data"),
-                                        html.Th("Ações")
-                                    ])),
-                                    html.Tbody(id='table-body', style={'height': '100%'}),
-                                ])
-                            ]),
-                            className="h-100"
+                    dbc.Row([
+                        dbc.Col(dbc.Input(id='input-date', placeholder="Data", type="date", style={'width': '100%'}), xs=12, md=3, className="mb-2"),
+                        dbc.Col(dbc.Input(id='input-rua', placeholder="Rua", type="text", style={'width': '100%'}), xs=12, md=3, className="mb-2"),
+                        dbc.Col(dbc.Input(id='input-bairro', placeholder="Bairro", type="text", style={'width': '100%'}), xs=12, md=3, className="mb-2"),
+                        dbc.Col(html.Div([
+                            dbc.Button(html.I(className="bi bi-search"), id='search-button', style={'margin-right': '2%'}, color='#9b559c', className="btn-icon"),
+                            dbc.Button(html.I(className="bi bi-file-earmark-pdf"), id='pdf-button', style={'margin-right': '2%'}, color='white', className="btn-icon"),
+                            dbc.Button(html.I(className="bi bi-file-earmark-excel"), color='white', className="btn-icon"),
+                        ]), xs=12, md=3, className="mb-2"),
+                    ]),
+                    dbc.Row([
+                        dbc.Col(
+                            dbc.Card(
+                                dbc.CardBody([
+                                    html.H4("Histórico de Ocorrências", className="card-title"),
+                                    dbc.Table([
+                                        html.Thead(html.Tr([
+                                            html.Th("Ocorrências"),
+                                            html.Th("Rua"),
+                                            html.Th("Bairro"),
+                                            html.Th("Data"),
+                                            html.Th("Ações")
+                                        ])),
+                                        html.Tbody(id='table-body', style={'height': '100%'}),
+                                    ])
+                                ]),
+                                className="h-100",
+                                style={"max-height": "calc(90vh - 160px)", "overflow-y": "auto"}
+                            ),
+                            xs=12, md=12, className="h-100"
                         ),
-                        xs=12, md=12, className="h-100"
-                    ),
+                    ]),
+                    html.Br(),
+                    dbc.Row([
+                        dbc.Col(
+                            dbc.Pagination(id='pagination', max_value=5, fully_expanded=False, first_last=True, previous_next=True),
+                            width={"size": 12, "offset": 5},
+                            className="mb-2"
+                        )
+                    ]),
                 ]),
-                html.Br(),
-                dbc.Row([
-                    dbc.Col(
-                        dbc.Pagination(id='pagination', max_value=5, fully_expanded=False,first_last=True, previous_next=True),
-                        width={"size": 12, "offset": 5},  # Alinhar ao centro com offset
-                        className="mb-2"
-                    )
-                ]),
-            ]),
-        ], className="h-100"),
-        html.Br(),
-        dbc.Card([
-            dbc.CardBody([
-                html.H4("Mapa", className="card-title"),
-                dcc.Graph(id='mapa', style={'height': '400px'})
-            ]),
-        ], className="h-100"),
+            ], className="h-100", style={"max-height": "calc(100vh - 100px)", "overflow": "hidden"}), width=8),  # Ajuste a largura da coluna para 8
+
+            # Card de Mapa
+            dbc.Col(html.Div(
+                [
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H4("Mapa", className="card-title"),
+                            dcc.Graph(id='mapa', config={'responsive': True}, style={'height': '500px', 'width': '100%'}, className="card-map") ,# Altura fixa, largura 100%
+                        ], className="card-map-container"),
+                    ], className="h-100"),
+                    html.Br(),
+                    dbc.Card([
+                        dbc.CardBody([
+                            dbc.Carousel(
+                                id='carousel-images',
+                                items=[],  # Os itens serão carregados dinamicamente
+                                controls=True,
+                                indicators=True,
+                                interval=3000,
+                                ride="carousel",
+                                style={'height': '455px'}
+                            )
+                        ]),
+                    ], className="h-100"),
+                ],
+                id='map-container',  # Identificador para a visibilidade condicional
+                style={'display': 'none'}  # Inicialmente escondido
+            ), width=4)  # Ajuste a largura da coluna para 4
+        ]),
         dcc.Store(id='store', storage_type='memory'),  # Armazenamento temporário dos dados
         dcc.Download(id="download-pdf")
-    ], className="h-100")
+    ], className="container-fluid")
 
 @app.callback(
-    [Output('table-body', 'children'), Output('mapa', 'figure'), Output('pagination', 'max_value')],
-    [Input('search-button', 'n_clicks'), Input('pagination', 'active_page')],
-    [State('input-date', 'value'), State('input-rua', 'value'), State('input-bairro', 'value')]
+    [Output('table-body', 'children'),
+     Output('mapa', 'figure'),
+     Output('pagination', 'max_value'),
+     Output('map-container', 'style'),
+     Output('carousel-images', 'items')],
+    [Input('search-button', 'n_clicks'),
+     Input('pagination', 'active_page')],
+    [State('input-date', 'value'),
+     State('input-rua', 'value'),
+     State('input-bairro', 'value')]
 )
 def update_table_and_map(n_clicks, active_page, date_value, rua_value, bairro_value):
-    if n_clicks is None:
-        # Retorna o layout inicial do mapa
-        map_layout = go.Layout(
-            height=1000,
-            mapbox=dict(
-                style="open-street-map",
-                center=dict(lat=-23.5505, lon=-46.6333),  # Coordenadas padrão (São Paulo)
-                zoom=10,
-            ),
-            margin={"r":0,"t":0,"l":0,"b":0}  # Remover margens para que o mapa ocupe toda a área disponível
-        )
-        return [], go.Figure(layout=map_layout), 0
+    # Dados padrão para o carregamento inicial
+    if n_clicks is None and active_page is None:
+        active_page = 1
+        date_value = date_value or '2024-01-01'
+        rua_value = rua_value or ''
+        bairro_value = bairro_value or ''
 
     # URL da API
     api_url = "http://127.0.0.1:5000/filtro"
@@ -994,25 +1052,27 @@ def update_table_and_map(n_clicks, active_page, date_value, rua_value, bairro_va
         'date': date_value,
         'rua': rua_value,
         'bairro': bairro_value,
-        'page': active_page,
+        'page': active_page or 1,
         'page_size': page_size
     }
 
     # Fazendo a requisição com o método POST
     response = requests.post(api_url, json=data)
-    
+
     if response.status_code == 200:
         data = response.json()
         total_records = data['total']
         rows = []
         markers = []
+        carousel_items = []
 
         for idx, ocorrencia in enumerate(data['records']):
             rows.append(html.Tr([
                 html.Td(ocorrencia.get('ocorrencia', '')),
                 html.Td(ocorrencia.get('rua', '')),
-                html.Td(ocorrencia.get('bairro', '')),
+                html.Td(ocorrencia.get('bairro', '')),  
                 html.Td(ocorrencia.get('data', '')),
+                html.Td(ocorrencia.get('id', ''), style={'display': 'none'}),
                 html.Td(html.Div([
                     dbc.Button(html.I(className="bi bi-card-list"), id=f'btn-doc-{idx}', color="link", className="btn-icon"),
                     dbc.Button(
@@ -1024,6 +1084,7 @@ def update_table_and_map(n_clicks, active_page, date_value, rua_value, bairro_va
                     ),
                 ], className="d-flex justify-content-around"))
             ]))
+
             coordenadas = eval(ocorrencia.get('coordenadas', ''))
             if coordenadas:
                 markers.append(dict(
@@ -1033,77 +1094,47 @@ def update_table_and_map(n_clicks, active_page, date_value, rua_value, bairro_va
                     marker=dict(size=12)
                 ))
 
+            if 'imagem' in ocorrencia and ocorrencia['imagem']:
+                for img_url in ocorrencia['imagem']:
+                    carousel_items.append({
+                        'key': f"carousel-img-{idx}-{img_url}",
+                        'src': f"https://carros.meumunicipio.online/{img_url}",   
+                        'alt': f"Imagem {idx}"
+                    })
+
         map_layout = go.Layout(
             height=1000,
             mapbox=dict(
                 style="open-street-map",
                 zoom=10,
                 center=dict(
-                    lat=markers[0]['lat'] if markers else -23.5505,  # Latitude do centro do mapa
-                    lon=markers[0]['lon'] if markers else -46.6333  # Longitude do centro do mapa
+                    lat=markers[0]['lat'] if markers else -23.5505,
+                    lon=markers[0]['lon'] if markers else -46.6333
                 ),
             ),
-            margin={"r":0,"t":0,"l":0,"b":0}  # Remover margens para que o mapa ocupe toda a área disponível
+            margin={"r":0,"t":0,"l":0,"b":0}
         )
 
         map_figure = go.Figure(layout=map_layout)
 
         if markers:
             map_figure.add_trace(go.Scattermapbox(
-                lat=[marker['lat'] for marker in markers],  # Latitude dos marcadores
-                lon=[marker['lon'] for marker in markers],  # Longitude dos marcadores
+                lat=[marker['lat'] for marker in markers],
+                lon=[marker['lon'] for marker in markers],
                 mode='markers',
                 marker=dict(size=14, color='red', opacity=0.7),
                 text=[marker['name'] for marker in markers]
             ))
 
         total_pages = math.ceil(total_records / page_size)
-        return rows, map_figure, total_pages
+        return rows, map_figure, total_pages, {'display': 'block'}, carousel_items
 
     else:
-        map_layout = go.Layout(
-            height=1000,
-            mapbox=dict(
-                style="open-street-map",
-                center=dict(lat=-23.5505, lon=-46.6333),  # Coordenadas padrão (São Paulo)
-                zoom=10,
-            ),
-            margin={"r":0,"t":0,"l":0,"b":0}  # Remover margens para que o mapa ocupe toda a área disponível
-        )
-        return [html.Tr([html.Td("Erro ao buscar dados", colSpan=5)])], go.Figure(layout=map_layout), 0
+        return [html.Tr([html.Td("Erro ao buscar dados", colSpan=5)])], go.Figure(), 1, {'display': 'none'}, []
+
 
 def create_settings_layout():
-    options = [
-        {"label": "Afundamento", "value": 1},
-        {"label": "Alerta de Pavimentação Danificado", "value": 2},
-        {"label": "Arbusto em Fiação", "value": 3},
-        {"label": "Bueiro", "value": 4},
-        {"label": "Buraco", "value": 5},
-        {"label": "Corrugação", "value": 5},
-        {"label": "Desgaste", "value": 5},
-        {"label": "Desnível", "value": 5},
-        {"label": "Faixa pedestre", "value": 5},
-        {"label": "Faixa pedestre danificada", "value": 5},
-        {"label": "Fissura", "value": 5},
-        {"label": "Guard rail", "value": 5},
-        {"label": "Guard rail danificado", "value": 5},
-        {"label": "Lixo", "value": 5},
-        {"label": "Mato alto", "value": 5},
-        {"label": "Pedestre", "value": 5},
-        {"label": "Placa de trânsito", "value": 5},
-        {"label": "Placa de trânsito danificada ", "value": 5},
-        {"label": "Placa de trânsito encoberta", "value": 5},
-        {"label": "Placa veículo", "value": 5},
-        {"label": "Remendo", "value": 5},
-        {"label": "Semáforo", "value": 5},
-        {"label": "Trinca bloco", "value": 5},
-        {"label": "Trinca bordo", "value": 5},
-        {"label": "Trinca fadiga", "value": 5},
-        {"label": "Trinca isolada", "value": 5},
-        {"label": "Veículo estacionado irregularmente", "value": 5},
-        {"label": "Veículo irregular", "value": 5},
-    ]
-
+    options = get_ocorrencias()
     mid = len(options) // 2
     options_col1 = options[:mid]
     options_col2 = options[mid:]
@@ -1148,6 +1179,7 @@ def create_settings_layout():
                 id="modal-centered",
                 centered=True,
                 is_open=False,
+                className="custom-modal"
             ),
         ]
     )
@@ -1159,11 +1191,126 @@ def create_settings_layout():
                             dbc.Label('Percurso'),
                             dbc.Checklist(
                                 options=[
-                                    {"label": "Rotas definidas", "value": 1},
-                                    {"label": "Arrecadação de IPTU", "value": 2},
-                                    {"label": "Algoritmo Urban", "value": 3},
+                                    {"label": "Rotas definidas", "value": 1, "disabled": True},
+                                    {"label": "Arrecadação de IPTU", "value": 2, "disabled": True},
+                                    {"label": "Algoritmo Urban", "value": 3,"disabled": False},
                                 ],
-                                value=[1],
+                                value=[3],
+                                id="switches-input",
+                                switch=True,
+                            ),
+                            html.Br(),
+
+                            dbc.Label("Ocorrências"),
+                            dbc.ListGroup(
+                                    [
+                                        dbc.ListGroupItem(
+                                            item['label'],
+                                            id=f"item-{item['value']}"
+                                        ) for item in get_data_from_api()
+                                    ],
+                                    id="list-group-col1"
+                                ),
+                            html.Br(),
+                            modal
+                ),
+                width={"size": 4, "order": 1, "offset": 0}
+            ),
+            dbc.Col(
+                create_card("Itens Ativos",
+                            dbc.Row(
+                                [
+                                    dbc.Col(
+                                        dbc.Checklist(
+                                            options=options_col1,
+                                            value=[1],
+                                            id="switches-input-col1",
+                                            switch=True,
+                                        ),
+                                        width=6  # Metade da largura da linha
+                                    ),
+                                    dbc.Col(
+                                        dbc.Checklist(
+                                            options=options_col2,
+                                            value=[1],
+                                            id="switches-input-col2",
+                                            switch=True,
+                                        ),
+                                        width=6  # Metade da largura da linha
+                                    ),
+                                ]
+                            )
+                ),
+                width={"size": 8, "order": 2, "offset": 0}
+            ),
+        ]),
+        dbc.Row([
+            dbc.Col(
+                create_card("Adicionar Nova Rota",
+                            dbc.Label("Adicionar nova rota:"),
+                            dbc.Col([
+                                create_generic_map2(),  # Mapa ocupando 10 colunas
+                                html.Br(),
+                                html.Br(),
+                                dbc.Row([
+                                    dbc.Col(html.Div([html.Button("Adicionar nova Rota", id="meu-botao", className="btn btn-  text-center")]), width={"size": 2, "offset": 5})  # Botão ocupando 2 colunas e alinhado ao centro
+                                ])
+                            ], width=12)
+                ),
+            ),
+        ]),
+       
+        # Para controlar o layout
+        html.Div(id='page-content')
+    ])
+
+def create_parametros_layout():
+    options = get_ocorrencias()
+    mid = len(options) // 2
+    options_col1 = options[:mid]
+    options_col2 = options[mid:]
+
+    modal = html.Div(
+        [
+            dbc.Button("Editar", id="open-centered"),
+            dbc.Modal(
+                [
+                    dbc.ModalHeader(dbc.ModalTitle("Ocorrências Priorizadas"), close_button=True),
+                    dbc.ModalBody(
+                        [
+                            dbc.Label("Selecione 3 ocorrências nas quais deseja priorizar"),
+                            
+                        ]
+                    ),
+                    dbc.ModalFooter(
+                        dbc.Button(
+                            "Priorizar",
+                            id="close-parametros",
+                            className="ms-auto",
+                            n_clicks=0,
+                        )
+                    ),
+                ],
+                id="modal-parametros",
+                centered=True,
+                is_open=False,
+                className="custom-modal"
+            ),
+        ]
+    )
+
+    return html.Div([
+        dbc.Row([
+            dbc.Col(
+                create_card("Priorização",
+                            dbc.Label('Percurso'),
+                            dbc.Checklist(
+                                options=[
+                                    {"label": "Rotas definidas", "value": 1, "disabled": True},
+                                    {"label": "Arrecadação de IPTU", "value": 2, "disabled": True},
+                                    {"label": "Algoritmo Urban", "value": 3,"disabled": False},
+                                ],
+                                value=[3],
                                 id="switches-input",
                                 switch=True,
                             ),
@@ -1224,6 +1371,20 @@ def create_settings_layout():
                                 ])
                             ], width=12)
                 ),
+            ),
+        ]),
+       
+        # Para controlar o layout
+        html.Div(id='page-content')
+    ])
+
+def create_maps_layout():
+    return html.Div([
+        dbc.Row([
+            dbc.Col(
+                                create_map(get_coordenadas()),  # Mapa ocupando 10 colunas
+                                
+                            
             ),
         ]),
        
@@ -1323,34 +1484,62 @@ def create_new_cadastro_modal():
                 [
                     dbc.ModalHeader(dbc.ModalTitle("Novo Cadastro")),
                     dbc.ModalBody(
-
                         [
-                            
                             dbc.Row([
                                 dbc.Col([
-                                    
-                                    dbc.Input(type="text", id="input-ocorrencia", placeholder="Digite o ocorrencia"),
+                                    dbc.Input(type="text", id="input-setor", placeholder="Informe o setor"),
                                 ]),
                             ]),
                             dbc.Row([
                                 dbc.Col([
-                                    
-                                    dbc.Input(type="text", id="input-departamento", placeholder="Digite o departamento"),
+                                    dbc.Input(type="text", id="input-nome", placeholder="Informe o nome"),
+                                ]),
+                            ]),
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Input(type="text", id="input-documento", placeholder="Informe o documento (CPF/CNPJ)"),
                                 ]),
                             ]),
                             dbc.Row([    
                                 dbc.Col([
-                                   
-                                    dbc.Input(type="email", id="input-contato", placeholder="Digite o contato"),
+                                    dbc.Input(type="email", id="input-contato", placeholder="Informe o email"),
                                 ]),
-                               
+                            ]),
+                            html.Div(
+                                [
+                                    dbc.Label("Selecione o tipo de acesso"),
+                                    dbc.RadioItems(
+                                        options=[
+                                            {"label": "Administração", "value": "admin"},
+                                            {"label": "Relatório", "value": "relatorio"},
+                                        ],
+                                        id="radio-options",
+                                        inline=True,
+                                    ),
+                                ],
+                                id="additional-options",
+                                style={"display": "none"},  # Inicialmente oculto
+                            ),
+                            html.Br(),
+                            dbc.Row([
+                                dbc.Col([
+                                    dbc.Label("Selecione a(s) ocorrência(s)"), 
+                                ]),
+                            ]),
+                            dbc.Row([
+                                dbc.Col(
+                                    dbc.Checklist(
+                                        options=get_data_from_api(),
+                                        value=[1],
+                                        id="switches-input-col1",
+                                        switch=True,
+                                    ),
+                                ),        
                             ]),
                         ]
-
                     ),
                     html.Br(),
                     dbc.ModalFooter([
-                        
                         dbc.Button("Salvar", id="close-modal", className="ms-auto")
                     ]),
                 ],
@@ -1407,7 +1596,7 @@ def create_protocol_layout():
                     dbc.ModalHeader(dbc.ModalTitle("Ocorrências Priorizadas"), close_button=True),
                     dbc.ModalBody(
                         [
-                            dbc.Label("Selecione 3 ocorrências nas quais deseja priorizar"),
+                            dbc.Label("Selecione as ocorrências nas quais deseja priorizar"),
                             dbc.Select(
                                 id="select1",
                                 placeholder="Selecione a primeira ocorrência",
@@ -1442,24 +1631,50 @@ def create_protocol_layout():
             ),
         ]
     )
+    print (return_acesso())
+    if return_acesso()== 'adm' or return_acesso()=='full':
+        print(request.json.get('access_type', 'externo'))
+        return dbc.Row(
+            dbc.Col(
+                dbc.Card(
+                    dbc.CardBody(
+                        [
+                            dbc.Tabs(
+                                [
+                                    dbc.Tab(create_card_chamados("Chamados"), label="Quadro de Chamados", tab_style={"height": "100%"}),
+                                    dbc.Tab(
+                                        html.Div(
+                                                [
+                                                    create_responsaveis_table(),
+                                                    create_new_cadastro_modal()  # Adiciona o modal e o botão aqui
+                                                    
+                                                ]
+                                            ), label="Responsáveis", tab_style={"height": "100%"}
+                                    ),
+                                ],
+                            ),
+                            html.Br(),
+                            html.Br(),  # Adiciona uma quebra de linha aqui
+                            html.Div(id="kanban-or-table-content")  # Div para o conteúdo do Kanban ou Tabela
+                        ]
+                    ),
+                    style={"height": "90vh"}
+                ),
+                width={"size": 12, "order": 1, "offset": 0}
+            ),
+            style={"height": "90vh"}
+        )
 
-    return dbc.Row(
+                
+    else:
+        return dbc.Row(
     dbc.Col(
         dbc.Card(
             dbc.CardBody(
                 [
                     dbc.Tabs(
                         [
-                            dbc.Tab(create_card_chamados("Chamados"), label="Quadro de Chamados", tab_style={"height": "100%"}),
-                            dbc.Tab(
-                                html.Div(
-                                        [
-                                            create_responsaveis_table(),
-                                            create_new_cadastro_modal()  # Adiciona o modal e o botão aqui
-                                            
-                                        ]
-                                    ), label="Responsáveis", tab_style={"height": "100%"}
-                            ),
+                            dbc.Tab(create_card_chamados("Chamados"), label="Quadro de Chamados", tab_style={"height": "100%"}),    
                         ],
                     ),
                     html.Br(),
@@ -1476,6 +1691,8 @@ def create_protocol_layout():
 
         
 
+
+            
 
 def create_reporter_layout():
 
@@ -1624,15 +1841,33 @@ def create_modal(modal_id, title, content):
         className="custom-modal"
     )
 
+def create_dash_metabase():
+    metabase_dashboard_url = "http://127.0.0.1:3000/public/dashboard/57c0888c-38a5-46b5-b488-ea44a32557ba"  # Substitua com a URL do seu dashboard
+
+    return html.Div([
+        html.Iframe(
+            src=metabase_dashboard_url,
+            style={
+                "width": "100%",
+                "height": "100vh",  # Ajustado para não ocupar toda a altura
+                "border": "0",
+                "position": "relative",   # Corrigido para permitir layout em colunas
+            },
+        ),
+        
+    ], style={"position": "relative", "width": "100%", "height": "100vh"})
+
+        
+    # Div também ocupando a tela toda
 def create_dashboard_tab_content():
     return html.Div([
         dbc.Row([
-            dbc.Col(create_card_with_link("Intercorrências", get_numero_intercorrencia(), "link-intercorrencias"), xs=6, md=6, lg=2),
-            dbc.Col(create_card_with_link("Ruas", get_ruas_percorridas(), "link-ruas"), xs=6, md=6, lg=2),
-            dbc.Col(create_card_with_link("Bairros", get_bairros_percorridos(), "link-bairros"), xs=6, md=6, lg=2),
-            dbc.Col(create_card_with_link("Quilometragem", ' 10', "link-quilometragem"), xs=6, md=6, lg=2),
-            dbc.Col(create_card_with_link("Chamados Abertos", get_total_requerementos(), "link-chamados-abertos"), xs=6, md=6, lg=2),
-            dbc.Col(create_card_with_link("Resolvidos", ' 10', "link-resolvidos"), xs=6, md=6, lg=2),
+            dbc.Col(create_card_with_link("Intercorrências", get_numero_intercorrencia(), "link-intercorrencias"), xs=6, md=6, lg=3),
+            dbc.Col(create_card_with_link("Ruas", get_ruas_percorridas(), "link-ruas"), xs=6, md=6, lg=3),
+            dbc.Col(create_card_with_link("Bairros", get_bairros_percorridos(), "link-bairros"), xs=6, md=6, lg=3),
+            dbc.Col(create_card_with_link("Quilometragem", ' 10', "link-quilometragem"), xs=6, md=6, lg=3),
+            #dbc.Col(create_card_with_link("Chamados Abertos", get_total_requerementos(), "link-chamados-abertos"), xs=6, md=6, lg=2),
+            #dbc.Col(create_card_with_link("Resolvidos", ' 10', "link-resolvidos"), xs=6, md=6, lg=2),
         ]),
         dbc.Row([
             dbc.Col(
@@ -1663,8 +1898,8 @@ def create_dashboard_tab_content():
             dbc.Col(create_card("Bairros com Maior Número de Intercorrências", create_top_bairros_intercorrencias_chart(get_top_bairros_intercorrencias())), xs=12, md=6, lg=6),        ]),
         # Adicionando modais
         create_modal("modal-intercorrencias", "Detalhes sobre Intercorrências",fetch_data_from_endpoint()),
-        create_modal("modal-ruas", "Detalhes sobre Ruas", "Aqui estão mais informações sobre ruas..."),
-        create_modal("modal-bairros", "Detalhes sobre Bairros", "Aqui estão mais informações sobre bairros..."),
+        create_modal("modal-ruas", "Detalhes sobre Ruas", exibeRuas()),
+        create_modal("modal-bairros", "Detalhes sobre Bairros", exibeBairros()),
         create_modal("modal-quilometragem", "Detalhes sobre Quilometragem", "Aqui estão mais informações sobre quilometragem..."),
         create_modal("modal-chamados-abertos", "Detalhes sobre Chamados Abertos", "Aqui estão mais informações sobre chamados abertos..."),
         create_modal("modal-resolvidos", "Detalhes sobre Resolvidos", "Aqui estão mais informações sobre resolvidos..."),
@@ -1688,77 +1923,6 @@ def create_dashboard_tab_content():
 
 layout = None
 
-def display_loading(active_tab):
-    if active_tab == "dashboard":
-        return html.Div(
-            [
-                dcc.Interval(id="progress-interval", n_intervals=0, interval=40),  # Atualiza a cada 40ms
-                html.Div(
-                    [
-                        dbc.Progress(id="progress"),
-                    ],
-                    id="progress-container",
-                    style={
-                        "position": "fixed",
-                        "top": "50%",
-                        "left": "50%",
-                        "transform": "translate(-50%, -50%)",
-                        "zIndex": "1000",
-                        "background": "rgba(255, 255, 255, 0.8)",
-                        "padding": "20px",
-                        "borderRadius": "10px",
-                    },
-                ),
-                html.Div(
-                    style={
-                        "position": "fixed",
-                        "top": "0",
-                        "left": "0",
-                        "width": "100%",
-                        "height": "100%",
-                        "backgroundColor": "rgba(0, 0, 0, 0.5)",
-                        "zIndex": "999",
-                    },
-                    id="background-overlay"
-                ),
-            ]
-        )
-    return html.Div()
-
-# Callback para atualizar a barra de progresso
-@app.callback(
-    [
-        Output("progress", "value"), 
-        Output("progress", "label"), 
-        Output("progress-container", "style"), 
-        Output("background-overlay", "style")
-    ],
-    [Input("progress-interval", "n_intervals")]
-)
-def update_progress(n):
-    # Calcula o progresso
-    progress = min(n * 2, 100)  # (4 segundos / 0.04 segundos por intervalo) = 100 atualizações
-    # Oculta os elementos após 4 segundos
-    display_style = {"display": "none"} if n * 0.04 >= 4 else {
-        "position": "fixed",
-        "top": "50%",
-        "left": "50%",
-        "transform": "translate(-50%, -50%)",
-        "zIndex": "1000",
-        "background": "rgba(255, 255, 255, 0.8)",
-        "padding": "20px",
-        "borderRadius": "10px",
-    }
-    background_style = {"display": "none"} if n * 0.04 >= 4 else {
-        "position": "fixed",
-        "top": "0",
-        "left": "0",
-        "width": "100%",
-        "height": "100%",
-        "backgroundColor": "rgba(0, 0, 0, 0.5)",
-        "zIndex": "999",
-    }
-    return progress, f"{int(progress)}%", display_style, background_style
 
 def get_logged_in_user():
     return "Prefeitura Hipotética"
@@ -1769,7 +1933,7 @@ user_photo_url = "https://upload.wikimedia.org/wikipedia/commons/2/22/Bras%C3%A3
 
 @app.callback(
     Output("tab-content", "children"),
-    Input("tabs", "active_tab"),
+    Input("tabs-container", "active_tab"),
 )
 
 
@@ -1780,13 +1944,19 @@ def render_tab_content(active_tab):
     elif active_tab == "settings":
         layout = create_settings_layout()
         return layout
+    elif active_tab == "parametros":
+        layout = create_parametros_layout()
+        return layout
+    elif active_tab == "maps":
+        layout = create_maps_layout()
+        return layout
     elif active_tab =='reporter':
-        layout = create_reporter_layout()
+       layout = create_reporter_layout()
     elif active_tab == "protocols":
         layout = create_protocol_layout()
         return layout
     else:
-        layout = create_dashboard_tab_content()
+        layout = create_dash_metabase()
         
         flag = 1
         return layout
@@ -1855,393 +2025,606 @@ edit_profile_modal = dbc.Modal(
 )
 
 
-if verificar_token():
-    
-    app.layout = html.Div(
-        className="row col-12",
-        children=[
-            # Sidebar
-            html.Div(
-                className="col-2",  
-                children=[
-                    sidebar_left, 
-                    dcc.Store(id='selected-coordinates-store')
-                ]
-            ),
-            # Conteúdo principal
-            html.Div(
-                className="col-10",  
-                children=[
-                    dbc.Row(
-                        [dbc.Col(
-                            dbc.Tabs(
-                                [
-                                    dbc.Tab(label="Dashboard", tab_id="dashboard", tab_style={"height": "100%", "font-size": "20px"}),
-                                    dbc.Tab(label="Relatórios", tab_id="totals", tab_style={"height": "100%", "font-size": "20px"}),
-                                    dbc.Tab(label="Processos", tab_id="protocols", tab_style={"height": "100%", "font-size": "20px"}),
-                                    dbc.Tab(label="Configuração", tab_id="settings", tab_style={"height": "100%", "font-size": "20px"}),
-                                ],
-                                id="tabs",
-                                active_tab="dashboard",  # Aba ativa padrão
-                            ),
-                            width="11"
+
+app.layout = html.Div(
+    className="row col-12",
+    children=[
+        # Sidebar
+        html.Script(src='/_dash-component-suites/dash/dcc/async-graph.js'),
+        html.Div(
+            className="col-2",  
+            children=[
+                sidebar_left, 
+                dcc.Store(id='access-type-store'),
+                dcc.Store(id='selected-coordinates-store')
+            ]
+        ),
+        # Conteúdo principal
+        html.Div(
+            className="col-10",  
+            children=[
+                dbc.Row(
+                    [dbc.Col(
+                        dbc.Tabs(
+                            dbc.Tabs(id='tabs-container'),  # Aba ativa padrão
                         ),
-                        dbc.Col(
-                            dbc.Tabs(
-                                [
-                                    dbc.Tab(label="Perfil", tab_id="open-edit-profile-modal", id='open-edit-profile-modal', tab_style={"height": "100%", "font-size": "20px", "margin-left": "46%"}),
-                                ],
-                                id="profile-tab",
-                                active_tab=None,  # Nenhuma aba ativa por padrão
-                            ),
-                        )],
-                        align="right",
+                        width="11"
                     ),
-                    dcc.Loading(id="loading", type="default", children=[html.Div(id="loading-output")]),
-                    # Espaçamento entre o Row e as Tabs
-                    html.Div(
-                        id="tab-content",
-                        children=[
-                            html.Div(className="col-10", children=layout),  # layout ocupando 100% da largura
-                        ]
-                    ),display_loading("dashboard"),
-                    dcc.Interval(
-                        id='interval-component',
-                        interval=5*1000,  
-                        n_intervals=0
-                    )
-                ]
-            ),
-            # Modals
-            edit_profile_modal,
-            # Script JavaScript para capturar cliques nos botões
-            html.Script('''
-            document.addEventListener('DOMContentLoaded', function() {
-                function addClickEvent(buttonId) {
-                    document.getElementById(buttonId).onclick = function() {
-                        var row = this.closest('tr');
-                        var data = {
-                            ocorrencia: row.cells[0].innerText,
-                            rua: row.cells[1].innerText,
-                            bairro: row.cells[2].innerText,
-                            data: row.cells[3].innerText
-                        };
-                        fetch('http://127.0.0.1:5000/endpoint', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(data)
-                        })
-                        .then(response => response.json())
-                        .then(result => console.log('Success:', result))
-                        .catch(error => console.error('Error:', error));
-                    }
-                }
-
-                document.querySelectorAll('[id^=btn-doc-]').forEach(function(button) {
-                    addClickEvent(button.id);
-                });
-            });
-            ''')
-        ]
-    )
-
-    @app.callback(
-        Output("edit-profile-modal", "is_open"),
-        [Input("open-edit-profile-modal", "n_clicks"), Input("close-edit-profile-modal", "n_clicks")],
-        [State("edit-profile-modal", "is_open")],
-    )
-    def toggle_modal(open_click, close_click, is_open):
-        ctx = dash.callback_context
-        if not ctx.triggered:
-            return is_open
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        if button_id == "open-edit-profile-modal":
-            return True
-        elif button_id == "close-edit-profile-modal":
-            return False
-        return is_open
-
-    @app.callback(
-        Output("change-password-fade", "is_in"),
-        [Input("open-change-password-fade", "n_clicks"), Input("close-change-password-fade", "n_clicks")],
-        [State("change-password-fade", "is_in")],
-    )
-    def toggle_change_password_fade(n1, n2, is_in):
-        if n1 or n2:
-            return not is_in
-        return is_in
-
-    @app.callback(
-        Output("password-validation-message", "children"),
-        [Input("new-password-input", "value"), Input("confirm-password-input", "value")],
-    )
-    def validate_password(new_password, confirm_password):
-        if new_password and confirm_password:
-            if new_password != confirm_password:
-                return "As senhas não coincidem."
-            else:
-                return ""
-        return ""
-
-    @app.callback(
-        Output("new-password-input", "type"),
-        [Input("toggle-new-password-visibility", "n_clicks")],
-        [State("new-password-input", "type")],
-    )
-    def toggle_new_password_visibility(n, current_type):
-        if n:
-            return "text" if current_type == "password" else "password"
-        return dash.no_update
-
-    @app.callback(
-        Output("confirm-password-input", "type"),
-        [Input("toggle-confirm-password-visibility", "n_clicks")],
-        [State("confirm-password-input", "type")],
-    )
-    def toggle_confirm_password_visibility(n, current_type):
-        if n:
-            return "text" if current_type == "password" else "password"
-        return dash.no_update
-
-    @app.callback(
-        Output("modal", "is_open"),
-        [Input("open-modal", "n_clicks"), Input("close-modal", "n_clicks")],
-        [State("modal", "is_open")],
-    )
-    def toggle_modal(n1, n2, is_open):
-        if n1 or n2:
-            return not is_open
-        return is_open
-
-    @app.callback(
-        Output("table", "data"),
-        [Input("save-button", "n_clicks")],
-        [State("input-nome", "value"),
-        State("input-departamento", "value"),
-        State("input-contato", "value"),
-        State("table", "data")],
-    )
-    def save_data(n_clicks, nome, departamento, contato, rows):
-        if n_clicks:
-            new_row = {"Nome": nome, "Departamento": departamento, "Contato": contato}
-            rows.append(new_row)
-        return rows
-
-    @app.callback(
-        Output("modal-intercorrencias", "is_open"),
-        [Input("link-intercorrencias", "n_clicks"), Input("close-modal-intercorrencias", "n_clicks")],
-        [State("modal-intercorrencias", "is_open")],
-    )
-    def toggle_modal_intercorrencias(n1, n2, is_open):
-        if n1 or n2:
-            return not is_open
-        return is_open
-
-    @app.callback(
-        Output("table-container-intercorrencias", "children"),
-        Input("modal-intercorrencias", "is_open")
-    )
-    def update_table_intercorrencias(is_open):
-        if is_open:
-            return fetch_data_from_endpoint()
-        return html.P("Clique no link para ver os detalhes.")
-
-    @app.callback(
-        Output("modal-image-display", "is_open"),
-        Output("modal-image", "src"),
-        [Input({"type": "image-click", "index": dash.dependencies.ALL}, "n_clicks")],
-        [State("modal-image-display", "is_open")]
-    )
-    def display_image_modal(n_clicks, is_open):
-        ctx = dash.callback_context
-        if not ctx.triggered:
-            return is_open, ""
+                    dbc.Col(
+        dbc.Tabs(
+            [
+                dbc.Tab(label="Perfil", tab_style={"height": "100%", "font-size": "20px", "margin-left": "46%"}, children=[
+                    dbc.Button("Editar Perfil", id="open-edit-profile-modal", n_clicks=0),
+                ]),
+            ],
+            id="profile-tab",
+            active_tab=None,  # Nenhuma aba ativa por padrão
+        ),
+                    )],
+                    align="right",
+                ),
+                dcc.Loading(id="loading", type="default", children=[html.Div(id="loading-output")]),
+                # Espaçamento entre o Row e as Tabs
+                html.Div(
+                    id="tab-content",
+                    children=[
+                        html.Div(className="col-10", children=layout),  # layout ocupando 100% da largura
+                    ]
+                ),
+            
+            ]
+        ),
+        # Modals
+        edit_profile_modal,
         
-        triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        triggered_index = triggered_id.split(":")[1].strip('}"')
-        image_src = f"https://carros.meumunicipio.online/{triggered_index}.png"
-        return not is_open, image_src
-
-    @app.callback(
-        Output("modal-ruas", "is_open"),
-        [Input("link-ruas", "n_clicks"), Input("close-modal-ruas", "n_clicks")],
-        [State("modal-ruas", "is_open")],
-    )
-    def toggle_modal_ruas(n1, n2, is_open):
-        if n1 or n2:
-            return not is_open
-        return is_open
-
-    @app.callback(
-        Output("modal-bairros", "is_open"),
-        [Input("link-bairros", "n_clicks"), Input("close-modal-bairros", "n_clicks")],
-        [State("modal-bairros", "is_open")],
-    )
-    def toggle_modal_bairros(n1, n2, is_open):
-        if n1 or n2:
-            return not is_open
-        return is_open
-
-    @app.callback(
-        Output("modal-quilometragem", "is_open"),
-        [Input("link-quilometragem", "n_clicks"), Input("close-modal-quilometragem", "n_clicks")],
-        [State("modal-quilometragem", "is_open")],
-    )
-    def toggle_modal_quilometragem(n1, n2, is_open):
-        if n1 or n2:
-            return not is_open
-        return is_open
-
-    @app.callback(
-        Output("modal-chamados-abertos", "is_open"),
-        [Input("link-chamados-abertos", "n_clicks"), Input("close-modal-chamados-abertos", "n_clicks")],
-        [State("modal-chamados-abertos", "is_open")],
-    )
-    def toggle_modal_chamados_abertos(n1, n2, is_open):
-        if n1 or n2:
-            return not is_open
-        return is_open
-
-    @app.callback(
-        Output("modal-resolvidos", "is_open"),
-        [Input("link-resolvidos", "n_clicks"), Input("close-modal-resolvidos", "n_clicks")],
-        [State("modal-resolvidos", "is_open")],
-    )
-    def toggle_modal_resolvidos(n1, n2, is_open):
-        if n1 or n2:
-            return not is_open
-        return is_open
-
-    @app.callback(
-        Output('output-div', 'children'),
-        [
-            Input('asfalto-checklist', 'value'),
-            Input('sinalizacao-checklist', 'value'),
-            Input('vias-publicas-checklist', 'value'),
-            Input('outros-checklist', 'value'),
-        ]
-    )
-    def update_output(asfalto_values, sinalizacao_values, vias_publicas_values, outros_values):
-        selected_values = []
-        if asfalto_values:
-            selected_values.extend(asfalto_values)
-        if sinalizacao_values:
-            selected_values.extend(sinalizacao_values)
-        if vias_publicas_values:
-            selected_values.extend(vias_publicas_values)
-        if outros_values:
-            selected_values.extend(outros_values)
-
-        return html.Div([
-            html.H4("Selected Values:"),
-            html.Pre(str(selected_values))
-        ])
-
-    @app.callback(
-        Output('selected-data', 'children'),
-        Input('generic-map', 'selectedData')
-    )
-    def display_selected_data(selectedData):
-        if selectedData is None:
-            return "No data selected"
-        return json.dumps(selectedData, indent=2)
-
-    @app.callback(
-        Output('interval-component', 'disabled'),
-        Input('selected-coordinates-store', 'data'),
-        State('selected-coordinates-store', 'data')
-    )
-    def trigger_alert(new_data, old_data):
-        if new_data and new_data != old_data:
-            coordinates_str = ', '.join([f"Lat: {lat}, Lon: {lon}" for lat, lon in new_data])
-            alert_script = f'alert("Selected Coordinates: {coordinates_str}");'
-            return False, dash.no_update, alert_script
-        return True, dash.no_update, dash.no_update
-
-    
-    
-    def fetch_data_from_endpoint():    
-        response = requests.get("http://127.0.0.1:5000/ocorrencia")
-        if response.status_code == 200:
-            data = response.json()
-            table_header = html.Thead(html.Tr([
-                html.Th("Placa", className="card-body-table first-column-margin"),
-                html.Th("Coluna2", className="card-body-table"),
-                html.Th("Imagem", className="card-body-table"),
-                html.Th("Data", className="card-body-table"),
-                html.Th("Visualização", className="card-body-table")
-            ]))
-            
-            table_body = html.Tbody([
-                html.Tr([
-                    html.Td(row[1]),
-                    html.Td(row[5]),
-                    html.Td(row[6]),
-                    html.Td(row[4]),
-                    html.Td(
-                        html.Img(
-                            src=f"https://carros.meumunicipio.online/{row[3]}",
-                            className="custom-image",
-                            style={"width": "100px", "height": "auto", "cursor": "pointer"},
-                            id={"type": "image-click", "index": row[3]}
-                        )
-                    )
-                ]) for row in data
-            ])
-            
-            table = dbc.Table([table_header, table_body], bordered=True, hover=True, striped=True, responsive=True)
-            return table
-        return html.P("Erro ao carregar dados do endpoint.")
-
-    app.clientside_callback(
-        """
-        function(n_clicks, data) {
-            if(n_clicks) {
-                document.querySelectorAll("[id^='btn-doc']").forEach(button => {
-                    button.onclick = function() {
-                        var row = button.closest('tr');
-                        var imageLink = row.querySelector('a').href;  // Captura o link da imagem
-                        var data = {
-                            ocorrencia: row.cells[0].innerText,
-                            rua: row.cells[1].innerText,
-                            bairro: row.cells[2].innerText,
-                            data: row.cells[3].innerText,
-                            imagem: imageLink  // Inclui o link da imagem no objeto data
-                        };
-
-                        console.log('data:', data);  // Imprime o data no console
-
-                        fetch('http://127.0.0.1:5000/action', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(data)
-                        })
-                        .then(response => response.json())
-                        .then(result => console.log('Success:', result))
-                        .catch(error => console.error('Error:', error));
-                    }
-                });
+        # Script JavaScript para capturar cliques nos botões
+        html.Script('''
+        document.addEventListener('DOMContentLoaded', function() {
+            function addClickEvent(buttonId) {
+                document.getElementById(buttonId).onclick = function() {
+                    var row = this.closest('tr');
+                    var data = {
+                        ocorrencia: row.cells[0].innerText,
+                        rua: row.cells[1].innerText,
+                        bairro: row.cells[2].innerText,
+                        data: row.cells[3].innerText
+                    };
+                    fetch('http://127.0.0.1:5000/endpoint', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    })
+                    .then(response => response.json())
+                    .then(result => console.log('Success:', result))
+                    .catch(error => console.error('Error:', error));
+                }
             }
-            return window.dash_clientside.no_update;
-        }
-        """,
-        Output('store', 'data'),
-        Input('table-body', 'children'),
-        State('store', 'data')
+
+            document.querySelectorAll('[id^=btn-doc-]').forEach(function(button) {
+                addClickEvent(button.id);
+            });
+        });
+        '''),
+ dbc.Offcanvas(
+        children=[
+
+            html.Img(id='imagem_modal', src='', style={'width': '100%','height':'100%', 'display': 'block'})
+        ],
+        id="imagem_offcanvas",
+        is_open=False,  # Inicialmente fechado
+        placement="bottom",  # Lado direito
+        scrollable=True,
+        style={"width": "50%", "height": "50vh"} 
     )
+])
 
-else:
-    print("Token inválido. Redirecionando para a página de login...")
-    # Redireciona para outra página ou URL
-    import webbrowser
-    webbrowser.open_new_tab('http://127.0.0.1:8051/')
+# Callback para abrir e fechar o painel lateral
+@app.callback(
+    [Output("imagem_offcanvas", "is_open"),
+     Output("imagem_modal", "src")],
+    [Input("mapa", "clickData")],
+    [State("imagem_offcanvas", "is_open")],
+)
+def toggle_offcanvas(clickData, is_open):
+    if clickData:
+        # Pega a URL da imagem dos dados do marcador clicado
+        imagem_url = clickData['points'][0]['customdata']
+        # Abre o painel lateral
+        return True, imagem_url
+    return is_open, ''
+@app.callback(
+    Output('tabs-container', 'children'),   
+    Input('access-type-store', 'data')
+)
+def update_tabs(access_type):
+    # Cria abas com base no tipo de acesso
+    tabs = create_tabs(access_type = request.cookies.get('access_type'))
+    print (tabs)
+    return tabs
+
+# Rota para definir o tipo de acesso no store
+@server.route('/set_access_type', methods=['POST'])
+def set_access_type():
+    access_type = request.json.get('access_type', 'externo')
+    # Atualiza o tipo de acesso no dcc.Store
+    return jsonify({'status': 'success'}), 200
 
 
 
+@app.callback(
+    Output("edit-profile-modal", "is_open"),
+    [Input("open-edit-profile-modal", "n_clicks"), Input("close-edit-profile-modal", "n_clicks")],
+    [State("edit-profile-modal", "is_open")],
+)
+def toggle_modal(open_click, close_click, is_open):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return is_open
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if button_id == "open-edit-profile-modal":
+        return True
+    elif button_id == "close-edit-profile-modal":
+        return False
+    return is_open
+
+@app.callback(
+    Output("change-password-fade", "is_in"),
+    [Input("open-change-password-fade", "n_clicks"), Input("close-change-password-fade", "n_clicks")],
+    [State("change-password-fade", "is_in")],
+)
+def toggle_change_password_fade(n1, n2, is_in):
+    if n1 or n2:
+        return not is_in
+    return is_in
+
+@app.callback(
+    Output("password-validation-message", "children"),
+    [Input("new-password-input", "value"), Input("confirm-password-input", "value")],
+)
+def validate_password(new_password, confirm_password):
+    if new_password and confirm_password:
+        if new_password != confirm_password:
+            return "As senhas não coincidem."
+        else:
+            return ""
+    return ""
+
+@app.callback(
+    Output("new-password-input", "type"),
+    [Input("toggle-new-password-visibility", "n_clicks")],
+    [State("new-password-input", "type")],
+)
+def toggle_new_password_visibility(n, current_type):
+    if n:
+        return "text" if current_type == "password" else "password"
+    return dash.no_update
+
+@app.callback(
+    Output("confirm-password-input", "type"),
+    [Input("toggle-confirm-password-visibility", "n_clicks")],
+    [State("confirm-password-input", "type")],
+)
+def toggle_confirm_password_visibility(n, current_type):
+    if n:
+        return "text" if current_type == "password" else "password"
+    return dash.no_update
+
+@app.callback(
+    [Output('modal', 'is_open'),
+    Output('additional-options', 'style')],
+    [Input('open-modal', 'n_clicks'),
+    Input('close-modal', 'n_clicks'),
+    Input('input-contato', 'value')],
+    [State('modal', 'is_open'),
+    State('input-setor', 'value'),
+    State('input-nome', 'value'),
+    State('input-documento', 'value'),
+    State('switches-input-col1', 'value'),
+    State('radio-options', 'value')]
+)
+def handle_modal_and_save(open_clicks, close_clicks, contato, is_open, setor, nome, documento, ocorrencias, access_type):
+    ctx = dash.callback_context
+
+    if not ctx.triggered:
+        raise dash.exceptions.PreventUpdate
+
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    # Lógica para abrir e fechar o modal
+    if triggered_id == "open-modal":
+        return True, {'display': 'none'}  # Abre o modal e oculta as opções adicionais
+    
+    if triggered_id == "close-modal":
+        if close_clicks:
+            # Determina o tipo de acesso com base no email de contato
+            tipo_acesso = access_type if access_type else "Administração"  # Padrão se não selecionado
+            acesso = "prefeitura" if contato.endswith('@acaruiy.com.br') else "externo"
+            
+            # Prepare os dados para enviar para a API
+            payload = {
+                "setor": setor,
+                "nome": nome,
+                "documento": documento,
+                "contato": contato,
+                "ocorrencias": ocorrencias,
+                "acesso": acesso,
+                "tipo_acesso": tipo_acesso
+            }
+            
+            print(payload)
+            # Enviar dados para a API
+            response = requests.post("http://127.0.0.1:5000/convidar", json=payload)
+            
+            if response.status_code == 200:
+                print("Dados enviados com sucesso")
+            else:
+                print(f"Erro ao enviar dados: {response.status_code}")
+
+        return False, {'display': 'none'}  # Fecha o modal e oculta as opções adicionais
+
+    # Lógica para mostrar/ocultar opções adicionais
+    if triggered_id == 'input-contato':
+        if contato and contato.endswith('@acaruiy.com.br'):
+            return is_open, {'display': 'block'}
+        return is_open, {'display': 'none'}
+
+    raise dash.exceptions.PreventUpdate
+@app.callback(
+    Output("table", "data"),
+    [Input("save-button", "n_clicks")],
+    [State("input-nome", "value"),
+    State("input-departamento", "value"),
+    State("input-contato", "value"),
+    State("table", "data")],
+)
+def save_data(n_clicks, nome, departamento, contato, rows):
+    if n_clicks:
+        new_row = {"Nome": nome, "Departamento": departamento, "Contato": contato}
+        rows.append(new_row)
+    return rows
+
+@app.callback(
+    Output("modal-intercorrencias", "is_open"),
+    [Input("link-intercorrencias", "n_clicks"), Input("close-modal-intercorrencias", "n_clicks")],
+    [State("modal-intercorrencias", "is_open")],
+)
+def toggle_modal_intercorrencias(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+@app.callback(
+    Output("table-container-intercorrencias", "children"),
+    Input("modal-intercorrencias", "is_open")
+)
+def update_table_intercorrencias(is_open):
+    if is_open:
+        return fetch_data_from_endpoint()
+    return html.P("Clique no link para ver os detalhes.")
+
+@app.callback(
+    Output("modal-image-display", "is_open"),
+    Output("modal-image", "src"),
+    [Input({"type": "image-click", "index": dash.dependencies.ALL}, "n_clicks")],
+    [State("modal-image-display", "is_open")]
+)
+def display_image_modal(n_clicks, is_open):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return is_open, ""
+    
+    triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    triggered_index = triggered_id.split(":")[1].strip('}"')
+    image_src = f"https://carros.meumunicipio.online/{triggered_index}.png"
+    return not is_open, image_src
+
+@app.callback(
+    Output("modal-ruas", "is_open"),
+    [Input("link-ruas", "n_clicks"), Input("close-modal-ruas", "n_clicks")],
+    [State("modal-ruas", "is_open")],
+)
+def toggle_modal_ruas(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+@app.callback(
+    Output("modal-bairros", "is_open"),
+    [Input("link-bairros", "n_clicks"), Input("close-modal-bairros", "n_clicks")],
+    [State("modal-bairros", "is_open")],
+)
+def toggle_modal_bairros(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+@app.callback(
+    Output("modal-quilometragem", "is_open"),
+    [Input("link-quilometragem", "n_clicks"), Input("close-modal-quilometragem", "n_clicks")],
+    [State("modal-quilometragem", "is_open")],
+)
+def toggle_modal_quilometragem(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+@app.callback(
+    Output("modal-chamados-abertos", "is_open"),
+    [Input("link-chamados-abertos", "n_clicks"), Input("close-modal-chamados-abertos", "n_clicks")],
+    [State("modal-chamados-abertos", "is_open")],
+)
+def toggle_modal_chamados_abertos(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+@app.callback(
+    Output("modal-resolvidos", "is_open"),
+    [Input("link-resolvidos", "n_clicks"), Input("close-modal-resolvidos", "n_clicks")],
+    [State("modal-resolvidos", "is_open")],
+)
+def toggle_modal_resolvidos(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+@app.callback(
+    Output('output-div', 'children'),
+    [
+        Input('asfalto-checklist', 'value'),
+        Input('sinalizacao-checklist', 'value'),
+        Input('vias-publicas-checklist', 'value'),
+        Input('outros-checklist', 'value'),
+    ]
+)
+def update_output(asfalto_values, sinalizacao_values, vias_publicas_values, outros_values):
+    selected_values = []
+    if asfalto_values:
+        selected_values.extend(asfalto_values)
+    if sinalizacao_values:
+        selected_values.extend(sinalizacao_values)
+    if vias_publicas_values:
+        selected_values.extend(vias_publicas_values)
+    if outros_values:
+        selected_values.extend(outros_values)
+
+    return html.Div([
+        html.H4("Selected Values:"),
+        html.Pre(str(selected_values))
+    ])
+
+@app.callback(
+    Output('selected-data', 'children'),
+    Input('generic-map', 'selectedData')
+)
+def display_selected_data(selectedData):
+    if selectedData is None:
+        return "No data selected"
+    return json.dumps(selectedData, indent=2)
+
+@app.callback(
+    Output('interval-component', 'disabled'),
+    Input('selected-coordinates-store', 'data'),
+    State('selected-coordinates-store', 'data')
+)
+def trigger_alert(new_data, old_data):
+    if new_data and new_data != old_data:
+        coordinates_str = ', '.join([f"Lat: {lat}, Lon: {lon}" for lat, lon in new_data])
+        alert_script = f'alert("Selected Coordinates: {coordinates_str}");'
+        return False, dash.no_update, alert_script
+    return True, dash.no_update, dash.no_update
+
+
+
+def fetch_data_from_endpoint():    
+    response = requests.get("http://127.0.0.1:5000/ocorrencia")
+    if response.status_code == 200:
+        data = response.json()
+        table_header = html.Thead(html.Tr([
+            html.Th("Ocorrência", className="card-body-table first-column-margin"),
+            html.Th("Rua", className="card-body-table"),
+            html.Th("Bairro", className="card-body-table"),
+            html.Th("Data", className="card-body-table"),
+        ]))
+        
+        table_body = html.Tbody([
+            html.Tr([
+                html.Td(row[1]),
+                html.Td(row[5]),
+                html.Td(row[6]),
+                html.Td(row[4]),
+                
+            ]) for row in data
+        ])
+        
+        table = dbc.Table([table_header, table_body], bordered=True, hover=True, striped=True, responsive=True)
+        return table
+    return html.P("Erro ao carregar dados do endpoint.")
+
+
+def exibeRuas():    
+    response = requests.get("http://127.0.0.1:5000/ruas")
+    if response.status_code == 200:
+        data = response.json()
+        table_header = html.Thead(html.Tr([
+            html.Th("Rua", className="card-body-table"),
+            html.Th("Bairro", className="card-body-table"),
+            html.Th("Número de Ocorrências", className="card-body-table"),
+        ]))
+        
+        table_body = html.Tbody([
+            html.Tr([
+                html.Td(row['ruaIntercorrencia']),
+                html.Td(row['bairroIntercorrencia']),
+                html.Td(row['count(tipoIntercorrencia)']),
+                
+            ]) for row in data
+        ])
+        
+        table = dbc.Table([table_header, table_body], bordered=True, hover=True, striped=True, responsive=True)
+        return table
+    return html.P("Erro ao carregar dados do endpoint.")
+
+def exibeBairros():    
+    response = requests.get("http://127.0.0.1:5000/bairros")
+    if response.status_code == 200:
+        data = response.json()
+        table_header = html.Thead(html.Tr([
+            html.Th("Bairro", className="card-body-table"),
+            html.Th("Número de Ruas", className="card-body-table"),
+            html.Th("Número de Ocorrências", className="card-body-table"),
+        ]))
+        
+        table_body = html.Tbody([
+            html.Tr([
+                
+                html.Td(row['bairroIntercorrencia']),
+                html.Td(row['count(distinct (ruaIntercorrencia))']),
+                html.Td(row['count(tipoIntercorrencia)']),
+                
+            ]) for row in data
+        ])
+        
+        table = dbc.Table([table_header, table_body], bordered=True, hover=True, striped=True, responsive=True)
+        return table
+    return html.P("Erro ao carregar dados do endpoint.")
+
+
+@app.callback(
+Output("modal-centered", "is_open"),
+[Input("open-centered", "n_clicks"), Input("close-centered", "n_clicks")],
+[State("modal-centered", "is_open"), State("select1", "value"), State("select2", "value"), State("select3", "value")],
+)
+def toggle_modal(n_open, n_close, is_open, value1, value2, value3):
+    if n_close:  # If the close button is clicked
+        # Prepare data to be sent to the API
+        data = {
+            "select1": value1,
+            "select2": value2,
+            "select3": value3
+        }
+
+        # Send data to the API
+        response = requests.post("http://127.0.0.1:5000/priorizacao", json=data)
+
+        # Check if the request was successful
+        if response.status_code == 200:
+            print("Data successfully sent to API.")
+        else:
+            print("Failed to send data to API.")
+
+        # Close the modal
+        return False
+
+    if n_open:  # If the open button is clicked
+        return not is_open
+
+    return is_open
+
+@app.callback(
+    Output("modal-parametros", "is_open"),
+    [Input("open-parametros", "n_clicks"), Input("close-parametros", "n_clicks")],
+    [State("modal-parametros", "is_open"), State("select1", "value"), State("select2", "value"), State("select3", "value")],
+)
+def toggle_modal(n_open, n_close, is_open, value1, value2, value3):
+    if n_close:  # If the close button is clicked
+        # Prepare data to be sent to the API
+        data = {
+            "select1": value1,
+            "select2": value2,
+            "select3": value3
+        }
+
+        # Send data to the API
+        response = requests.post("http://127.0.0.1:5000/priorizacao", json=data)
+
+        # Check if the request was successful
+        if response.status_code == 200:
+            print("Data successfully sent to API.")
+        else:
+            print("Failed to send data to API.")
+
+        # Close the modal
+        return False
+
+    if n_open:  # If the open button is clicked
+        return not is_open
+
+    return is_open
+
+
+app.clientside_callback(
+    """
+    function(n_clicks, data) {
+        if(n_clicks) {
+            document.querySelectorAll("[id^='btn-doc']").forEach(button => {
+                button.onclick = function() {
+                    var row = button.closest('tr');
+                    var imageLink = row.querySelector('a').href;  // Captura o link da imagem
+                    var data = {
+                        ocorrencia: row.cells[0].innerText,
+                        rua: row.cells[1].innerText,
+                        bairro: row.cells[2].innerText,
+                        data: row.cells[3].innerText,
+                        imagem: imageLink,  // Inclui o link da imagem no objeto data
+                        id:row.cells[4].innerText
+                    };
+
+                    console.log('data:', data);  // Imprime o data no console
+
+                    fetch('http://127.0.0.1:5000/action', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    })
+                    .then(response => response.json())
+                    .then(result => console.log('Success:', result))
+                    .catch(error => console.error('Error:', error));
+                }
+            });
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output('store', 'data'),
+    Input('table-body', 'children'),
+    State('store', 'data')
+)
+
+@server.route('/dashboard')
+def dashboard():
+    # Recuperar cookies
+    token = request.cookies.get('token')
+    global access_type
+    access_type = request.cookies.get('access_type')
+
+    if not token or not access_type:
+        return 'http://127.0.0.1:8052/'
+
+    # Verificar e usar o token e o tipo de acesso
+    if validate_token(token):
+        return app.index()
+    else:
+        return "Token inválido, por favor faça login novamente.", 401
+   
+
+def validate_token(token):
+    # Função para validar o token
+    # Adicione aqui a lógica real de validação do token
+    return True  # Simulando que o token é sempre válido para o exemplo
+
+@server.route('/')
+def index():
+    return render_template('index.html')
+
+# Rota Flask para renderizar o Dash
+
+def return_acesso():
+    return request.cookies.get('access_type')
 if __name__ == "__main__":
     app.run(debug=False)
     

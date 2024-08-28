@@ -17,7 +17,7 @@
 
 .form-check-input:checked {
   background-color:  #8d008fa6;
-  border-color:  #8d008fa6;
+
 }
 
 .form-switch .form-check-input:checked::before {
@@ -191,4 +191,15 @@ body::-webkit-scrollbar-thumb {
   color:  #8d008fa6;
   border: none;
   box-shadow: inset 0 -2px 0  #8d008fa6;
+}
+
+.card-map-container {
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* Garante que nada "escape" do card */
+}
+
+.card-map {
+  height: 400px; /* Altura fixa */
+  width: 100%;
 }

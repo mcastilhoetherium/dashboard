@@ -3,12 +3,32 @@ from dash import dcc, html, Input, Output, State
 import dash_bootstrap_components as dbc
 import requests
 import json
-from flask import Flask
-import requests
+import mysql.connector
+from flask import request, make_response, redirect, jsonify
+
+def check_email_in_db(email):
+    try:
+        connection = mysql.connector.connect(
+            host='172.16.30.111',
+            user='mcastilho',
+            password='#KUTu547G6!aV@Si',
+            database='carroConectado'
+        )
+        cursor = connection.cursor()
+        query = "SELECT COUNT(*) FROM nivelAcesso WHERE email = %s"
+        cursor.execute(query, (email,))
+        result = cursor.fetchone()
+        return result[0] > 0
+    except mysql.connector.Error as err:
+        print(f"Erro ao conectar ao banco de dados: {err}")
+        return False
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.MATERIA])
 
-# Definindo o estilo do quadrado branco
 quadrado_branco = dbc.Card(
     [
         dbc.CardHeader(
@@ -65,7 +85,6 @@ offcanvas_verificacao = dbc.Offcanvas(
     placement="end",
 )
 
-# Layout da aplicação
 app.layout = html.Div(
     [
         dcc.Location(id='url', refresh=True),
@@ -79,103 +98,123 @@ app.layout = html.Div(
             ],
             style={"height": "100vh", "display": "flex", "align-items": "center", "justify-content": "center"},
         ),
-        offcanvas_verificacao
+        offcanvas_verificacao,
+        dcc.Store(id='store-token'),
     ]
 )
 
 @app.callback(
-    Output("login-status", "children"),
-    Output("offcanvas-verificacao", "is_open"),
-    Input("login-button", "n_clicks"),
-    State("example-email", "value"),
-    State("example-password", "value"),
+    [Output("login-status", "children"),
+     Output("offcanvas-verificacao", "is_open"),
+     Output("verify-status", "children"),
+     Output('url', 'href')],
+    [Input("login-button", "n_clicks"),
+     Input("verify-button", "n_clicks")],
+    [State("example-email", "value"),
+     State("example-password", "value"),
+     State("verify-code", "value")],
     prevent_initial_call=True
 )
-def login(n_clicks, email, password):
-    if n_clicks and email and password:
+def update_status(login_n_clicks, verify_n_clicks, email, password, verify_code):
+    ctx = dash.callback_context
+
+    if not ctx.triggered:
+        return "", False, "", None
+
+    triggered_input = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    if triggered_input == "login-button":
+        if not check_email_in_db(email):
+            return "E-mail não encontrado na base de dados.", False, "", None
+
         url = "https://gatewayqa.sigcorp.com.br/plataforma/auth/login"
         payload = json.dumps({
             "email": email,
-            "cpf": "09876574965",  # Este valor pode ser dinâmico se necessário
+            "cpf": "09876574965",
             "password": password,
-            "keepAlive": True,
-            "verifyCode": ""
+            "keepAlive": True
         })
-        headers = {
-            'Content-Type': 'application/json'
-        }
-
-        try:
-            response = requests.post(url, headers=headers, data=payload, verify=False)
-            if response.status_code == 200:
-                response_data = response.json()
-                if response_data.get("message") == "Código de verificação enviado para o email!":
-                    return "Código de verificação enviado para o email!", True
-                else:
-                    return f"Falha no login: {response.text}", False
-            else:
-                return f"Falha no login: {response.text}", False
-        except requests.exceptions.RequestException as e:
-            return f"Erro na requisição: {e}", False
-    return "", False
-
-@app.callback(
-    Output("verify-status", "children"),
-    Output("url", "href"),
-    Input("verify-button", "n_clicks"),
-    State("example-email", "value"),
-    State("example-password", "value"),
-    State("verify-code", "value"),
-    prevent_initial_call=True
-)
-def verify_code(n_clicks, email, password, verify_code):
-    if n_clicks and email and password and verify_code:
-        url = "https://gatewayqa.sigcorp.com.br/plataforma/auth/login"
-        payload = json.dumps({
-            "email": email,
-            "cpf": "09876574965",  # Este valor pode ser dinâmico se necessário
-            "password": password,
-            "keepAlive": True,
-            "verifyCode": verify_code
-        })
-        headers = {
-            'Content-Type': 'application/json'
-        }
+        headers = {'Content-Type': 'application/json'}
 
         try:
             response = requests.post(url, headers=headers, data=payload, verify=False)
             if response.status_code == 200:
                 response_data = response.json()
                 if response_data.get("message") == "Usuário logado com sucesso!":
-                    # Enviar o token para o endpoint Flask
-                    token = response_data["data"]["access_token"]
-                    send_token_to_flask(token)
-                    return "Usuário logado com sucesso!", "http://127.0.0.1:8050/"
+                    return "Usuário logado com sucesso!", True, "", None
+                elif response_data.get("message") == "Código de verificação enviado para o email!":
+                    return "Código de verificação enviado para o email!", True, "", None
                 else:
-                    return f"Falha no login: {response.text}", None
+                    return f"Falha no login: {response_data.get('message')}", False, "", None
             else:
-                return f"Falha no login: {response.text}", None
+                return f"Falha no login: {response.text}", False, "", None
         except requests.exceptions.RequestException as e:
-            return f"Erro na requisição: {e}", None
-    return "", None
+            return f"Erro na requisição: {e}", False, "", None
 
-# Função para enviar o token para o endpoint Flask
-def send_token_to_flask(token):
-    url = "http://127.0.0.1:5000/autenticacao"
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    payload = {
-        "token": token
-    }
+    elif triggered_input == "verify-button":
+        if email and password and verify_code:
+            url = "https://gatewayqa.sigcorp.com.br/plataforma/auth/login"
+            payload = json.dumps({
+                "email": email,
+                "cpf": "09876574965",
+                "password": password,
+                "verifyCode": verify_code,
+                "keepAlive": True
+            })
+            headers = {'Content-Type': 'application/json'}
+            try:
+                response = requests.post(url, headers=headers, data=payload, verify=False)
+                if response.status_code == 200:
+                    response_data = response.json()
+                    if response_data.get("message") == "Usuário logado com sucesso!":
+                        token = response_data["data"]["access_token"]
+                        access_type = get_access_type_from_db(email)  # Obtém o tipo de acesso do banco
+
+                        set_cookie_url = f"/set_cookie?token={token}&access_type={access_type}"
+
+                        return "", False, "Usuário verificado com sucesso!", set_cookie_url
+                    else:
+                        return "", True, f"Falha na verificação: {response_data.get('message')}", None
+                else:
+                    return "", True, f"Falha na verificação: {response.text}", None
+            except requests.exceptions.RequestException as e:
+                return "", True, f"Erro na requisição: {e}", None
+
+    return "", False, "", None
+
+def get_access_type_from_db(email):
     try:
-        response = requests.post(url, headers=headers, json=payload)
-        if response.status_code == 200:
-            print("Token enviado com sucesso para o endpoint Flask.")
-        else:
-            print(f"Falha ao enviar token para o endpoint Flask: {response.text}")
-    except requests.exceptions.RequestException as e:
-        print(f"Erro ao enviar token para o endpoint Flask: {e}")
+        connection = mysql.connector.connect(
+            host='172.16.30.111',
+            user='mcastilho',
+            password='#KUTu547G6!aV@Si',
+            database='carroConectado'
+        )
+        cursor = connection.cursor()
+        query = "SELECT tipoAcesso FROM nivelAcesso WHERE email = %s"
+        cursor.execute(query, (email,))
+        result = cursor.fetchone()
+        return result[0] if result else "default"  # Retorna um tipo de acesso padrão se não encontrado
+    except mysql.connector.Error as err:
+        print(f"Erro ao conectar ao banco de dados: {err}")
+        return "default"
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+
+@app.server.route('/set_cookie')
+def set_cookie():
+    token = request.args.get("token")
+    access_type = request.args.get("access_type")
+
+    # Definir cookies com o token e o tipo de acesso
+    response = make_response(redirect('http://127.0.0.1:8050/dashboard'))
+    response.set_cookie("token", token, httponly=True, secure=True)
+    response.set_cookie("access_type", access_type, httponly=True, secure=True)
+    return response
+
+
 
 if __name__ == '__main__':
-    app.run_server(debug=True, port=8051)
+    app.run_server(debug=True, port=8052)
