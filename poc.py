@@ -3,7 +3,7 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 import plotly.graph_objs as go
 import requests
-from dash.dependencies import Output, State, Input
+from dash.dependencies import Output, State, Input, ALL
 import folium
 from folium import plugins
 import json
@@ -997,7 +997,7 @@ def create_totals_layout():
                     dbc.Card([
                         dbc.CardBody([
                             html.H4("Mapa", className="card-title"),
-                            dcc.Graph(id='mapa', config={'responsive': True}, style={'height': '500px', 'width': '100%'}, className="card-map") ,# Altura fixa, largura 100%
+                            dcc.Graph(id='mapa', config={'responsive': True}, style={'height': '500px', 'width': '100%'}, className="card-map"),  # Altura fixa, largura 100%
                         ], className="card-map-container"),
                     ], className="h-100"),
                     html.Br(),
@@ -1030,24 +1030,35 @@ def create_totals_layout():
      Output('map-container', 'style'),
      Output('carousel-images', 'items')],
     [Input('search-button', 'n_clicks'),
-     Input('pagination', 'active_page')],
+     Input('pagination', 'active_page'),
+     Input({'type': 'btn-doc', 'index': ALL}, 'n_clicks')],
     [State('input-date', 'value'),
      State('input-rua', 'value'),
-     State('input-bairro', 'value')]
+     State('input-bairro', 'value'),
+     State({'type': 'btn-doc', 'index': ALL}, 'id')]
 )
-def update_table_and_map(n_clicks, active_page, date_value, rua_value, bairro_value):
+def update_table_and_map(search_n_clicks, active_page, doc_clicks, date_value, rua_value, bairro_value, doc_ids):
     # Dados padrão para o carregamento inicial
-    if n_clicks is None and active_page is None:
+    if search_n_clicks is None and active_page is None:
         active_page = 1
         date_value = date_value or '2024-01-01'
         rua_value = rua_value or ''
         bairro_value = bairro_value or ''
 
-    # URL da API
-    api_url = "http://127.0.0.1:5000/filtro"
-    page_size = 36
+    filtered_id = None
+    if doc_clicks:
+        ctx = dash.callback_context
+        if ctx.triggered:
+            filtered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            filtered_id = filtered_id.split(':')[1] if filtered_id else None
 
-    # Dados da requisição
+    if filtered_id:
+        api_url = f"http://127.0.0.1:5000/filtro/{filtered_id}"
+        page_size = 1  # Somente uma ocorrência
+    else:
+        api_url = "http://127.0.0.1:5000/filtro"
+        page_size = 36
+
     data = {
         'date': date_value,
         'rua': rua_value,
@@ -1056,12 +1067,11 @@ def update_table_and_map(n_clicks, active_page, date_value, rua_value, bairro_va
         'page_size': page_size
     }
 
-    # Fazendo a requisição com o método POST
     response = requests.post(api_url, json=data)
 
     if response.status_code == 200:
         data = response.json()
-        total_records = data['total']
+        total_records = data.get('total', 0)
         rows = []
         markers = []
         carousel_items = []
@@ -1093,15 +1103,20 @@ def update_table_and_map(n_clicks, active_page, date_value, rua_value, bairro_va
                     name=ocorrencia.get('ocorrencia', ''),
                     marker=dict(size=12)
                 ))
-
             if 'imagem' in ocorrencia and ocorrencia['imagem']:
-                for img_url in ocorrencia['imagem']:
+                if isinstance(ocorrencia['imagem'], str):
+                    img_urls = ocorrencia['imagem'].split(',')
+                elif isinstance(ocorrencia['imagem'], list):
+                    img_urls = ocorrencia['imagem']
+                else:
+                    img_urls = []
+
+                for idx, img_url in enumerate(img_urls):
                     carousel_items.append({
                         'key': f"carousel-img-{idx}-{img_url}",
-                        'src': f"https://carros.meumunicipio.online/{img_url}",   
-                        'alt': f"Imagem {idx}"
+                        'src': f"https://carros.meumunicipio.online/{img_url}",
+                        'alt': f"Imagem {idx}",
                     })
-
         map_layout = go.Layout(
             height=1000,
             mapbox=dict(
@@ -1126,12 +1141,11 @@ def update_table_and_map(n_clicks, active_page, date_value, rua_value, bairro_va
                 text=[marker['name'] for marker in markers]
             ))
 
-        total_pages = math.ceil(total_records / page_size)
+        total_pages = math.ceil(total_records / page_size) if not filtered_id else 1
         return rows, map_figure, total_pages, {'display': 'block'}, carousel_items
 
     else:
         return [html.Tr([html.Td("Erro ao buscar dados", colSpan=5)])], go.Figure(), 1, {'display': 'none'}, []
-
 
 def create_settings_layout():
     options = get_ocorrencias()
@@ -1843,21 +1857,20 @@ def create_modal(modal_id, title, content):
 
 def create_dash_metabase():
     metabase_dashboard_url = "http://127.0.0.1:3000/public/dashboard/57c0888c-38a5-46b5-b488-ea44a32557ba"  # Substitua com a URL do seu dashboard
-
     return html.Div([
         html.Iframe(
             src=metabase_dashboard_url,
             style={
                 "width": "100%",
-                "height": "100vh",  # Ajustado para não ocupar toda a altura
+                "height": "120vh",  # Ajustado para não ocupar toda a altura
                 "border": "0",
-                "position": "relative",   # Corrigido para permitir layout em colunas
+                "position": "relative",  # Corrigido para permitir layout em colunas
+                "overflow": "scroll",    # Adiciona o scroll ao iframe
+                "-webkit-scrollbar": "10px",  # Customiza a largura do scroll (apenas para navegadores que suportam Webkit)
             },
         ),
-        
     ], style={"position": "relative", "width": "100%", "height": "100vh"})
 
-        
     # Div também ocupando a tela toda
 def create_dashboard_tab_content():
     return html.Div([

@@ -800,5 +800,32 @@ def filtro():
 
     return jsonify({'total': total_records, 'records': response_data})
 
+@app.route('/consulta_chamados', methods=['GET'])
+def consulta_chamados():
+    connection = connect_to_database()
+    cursor = connection.cursor(dictionary=True)
+
+    # Consulta SQL para buscar os dados
+    query = """
+    SELECT a.id, a.data AS 'Chamado Aberto em:', a.status, a.descricao, 
+           i.tipoIntercorrencia, i.pathImagemIntercorrencia, 
+           i.dataIntercorrencia AS 'Detectado em:', i.bairroIntercorrencia, 
+           i.ruaIntercorrencia 
+    FROM chamados a 
+    INNER JOIN intercorrencia i ON a.idOcorrencia = i.idintercorrencia
+    """
+
+    try:
+        cursor.execute(query)
+        resultados = cursor.fetchall()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        connection.close()
+
+    return jsonify(resultados), 200
+
+
 if __name__ == '__main__':
     app.run(debug=False)
